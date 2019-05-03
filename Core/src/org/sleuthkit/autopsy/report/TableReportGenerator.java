@@ -1,7 +1,7 @@
 /*
  * Autopsy Forensic Browser
  *
- * Copyright 2013-16 Basis Technology Corp.
+ * Copyright 2013-2019 Basis Technology Corp.
  * Contact: carrier <at> sleuthkit <dot> org
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -38,12 +38,16 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.logging.Level;
 import org.openide.util.NbBundle;
+import org.openide.util.NbBundle.Messages;
 import org.sleuthkit.autopsy.casemodule.Case;
-import org.sleuthkit.autopsy.coreutils.EscapeUtil;
+import org.sleuthkit.autopsy.casemodule.NoCurrentCaseException;
+import org.sleuthkit.autopsy.casemodule.services.TagsManager;
 import org.sleuthkit.autopsy.coreutils.ImageUtils;
 import org.sleuthkit.autopsy.coreutils.Logger;
 import org.sleuthkit.autopsy.datamodel.ContentUtils;
+import static org.sleuthkit.autopsy.casemodule.services.TagsManager.getNotableTagLabel;
 import org.sleuthkit.datamodel.AbstractFile;
+import org.sleuthkit.datamodel.Account;
 import org.sleuthkit.datamodel.BlackboardArtifact;
 import org.sleuthkit.datamodel.BlackboardArtifactTag;
 import org.sleuthkit.datamodel.BlackboardAttribute;
@@ -51,6 +55,7 @@ import org.sleuthkit.datamodel.BlackboardAttribute.Type;
 import org.sleuthkit.datamodel.Content;
 import org.sleuthkit.datamodel.ContentTag;
 import org.sleuthkit.datamodel.SleuthkitCase;
+import org.sleuthkit.datamodel.TagName;
 import org.sleuthkit.datamodel.TskCoreException;
 import org.sleuthkit.datamodel.TskData;
 
@@ -59,7 +64,7 @@ class TableReportGenerator {
     private final List<BlackboardArtifact.Type> artifactTypes = new ArrayList<>();
     private final HashSet<String> tagNamesFilter = new HashSet<>();
 
-    private final List<Content> images = new ArrayList<>();
+    private final Set<Content> images = new HashSet<>();
     private final ReportProgressPanel progressPanel;
     private final TableReportModule tableReport;
     private final Map<Integer, List<Column>> columnHeaderMap;
@@ -154,9 +159,11 @@ class TableReportGenerator {
                 continue;
             }
 
-            /* TSK_ACCOUNT artifacts get grouped by their TSK_ACCOUNT_TYPE
+            /*
+             * TSK_ACCOUNT artifacts get grouped by their TSK_ACCOUNT_TYPE
              * attribute, and then handed off to the standard method for writing
-             * tables. */
+             * tables.
+             */
             if (type.getTypeID() == BlackboardArtifact.ARTIFACT_TYPE.TSK_ACCOUNT.getTypeID()) {
                 //Group account artifacts by their account type
                 ListMultimap<String, ArtifactData> groupedArtifacts = Multimaps.index(artifactList,
@@ -168,14 +175,27 @@ class TableReportGenerator {
                                 return "unknown";
                             }
                         });
-                for (String accountType : groupedArtifacts.keySet()) {
-                    /* If the report is a ReportHTML, the data type name
+                for (String accountTypeStr : groupedArtifacts.keySet()) {
+                    /*
+                     * If the report is a ReportHTML, the data type name
                      * eventualy makes it to useDataTypeIcon which expects but
                      * does not require a artifact name, so we make a synthetic
                      * compund name by appending a ":" and the account type.
                      */
-                    final String compundDataTypeName = BlackboardArtifact.ARTIFACT_TYPE.TSK_ACCOUNT.getDisplayName() + ": " + accountType;
-                    writeTableForDataType(new ArrayList<>(groupedArtifacts.get(accountType)), type, compundDataTypeName, comment);
+                    String accountDisplayname = accountTypeStr;
+                    if (accountTypeStr != null) {
+                        try {
+                            Account.Type acctType = Case.getCurrentCaseThrows().getSleuthkitCase().getCommunicationsManager().getAccountType(accountTypeStr);
+                            if (acctType != null) {
+                                accountDisplayname = acctType.getDisplayName();
+                            }
+                        } catch (TskCoreException | NoCurrentCaseException ex) {
+                            logger.log(Level.SEVERE, "Unable to get display name for account type " + accountTypeStr, ex);
+                        }
+                    }
+
+                    final String compundDataTypeName = BlackboardArtifact.ARTIFACT_TYPE.TSK_ACCOUNT.getDisplayName() + ": " + accountDisplayname;
+                    writeTableForDataType(new ArrayList<>(groupedArtifacts.get(accountTypeStr)), type, compundDataTypeName, comment);
                 }
             } else {
                 //all other artifact types are sent to writeTableForDataType directly
@@ -206,7 +226,8 @@ class TableReportGenerator {
                 attrTypeSet.add(attribute.getAttributeType());
             }
         }
-        /* Get the columns appropriate for the artifact type. This is used to
+        /*
+         * Get the columns appropriate for the artifact type. This is used to
          * get the data that will be in the cells below based on type, and
          * display the column headers.
          */
@@ -216,7 +237,8 @@ class TableReportGenerator {
         }
         columnHeaderMap.put(type.getTypeID(), columns);
 
-        /* The artifact list is sorted now, as getting the row data is dependent
+        /*
+         * The artifact list is sorted now, as getting the row data is dependent
          * on having the columns, which is necessary for sorting.
          */
         Collections.sort(artifactList);
@@ -243,14 +265,15 @@ class TableReportGenerator {
     /**
      * Make table for tagged files
      */
+    @Messages({"ReportGenerator.tagTable.header.userName=User Name"})
     @SuppressWarnings("deprecation")
     private void makeContentTagsTables() {
 
         // Get the content tags.
         List<ContentTag> tags;
         try {
-            tags = Case.getCurrentCase().getServices().getTagsManager().getAllContentTags();
-        } catch (TskCoreException ex) {
+            tags = Case.getCurrentCaseThrows().getServices().getTagsManager().getAllContentTags();
+        } catch (TskCoreException | NoCurrentCaseException ex) {
             errorList.add(NbBundle.getMessage(this.getClass(), "ReportGenerator.errList.failedGetContentTags"));
             logger.log(Level.SEVERE, "failed to get content tags", ex); //NON-NLS
             return;
@@ -266,6 +289,7 @@ class TableReportGenerator {
                 NbBundle.getMessage(this.getClass(), "ReportGenerator.htmlOutput.header.tag"),
                 NbBundle.getMessage(this.getClass(), "ReportGenerator.htmlOutput.header.file"),
                 NbBundle.getMessage(this.getClass(), "ReportGenerator.htmlOutput.header.comment"),
+                NbBundle.getMessage(this.getClass(), "ReportGenerator.tagTable.header.userName"),
                 NbBundle.getMessage(this.getClass(), "ReportGenerator.htmlOutput.header.timeModified"),
                 NbBundle.getMessage(this.getClass(), "ReportGenerator.htmlOutput.header.timeChanged"),
                 NbBundle.getMessage(this.getClass(), "ReportGenerator.htmlOutput.header.timeAccessed"),
@@ -291,7 +315,8 @@ class TableReportGenerator {
         // Give the modules the rows for the content tags. 
         for (ContentTag tag : tags) {
             // skip tags that we are not reporting on 
-            if (passesTagNamesFilter(tag.getName().getDisplayName()) == false) {
+            String notableString = tag.getName().getKnownStatus() == TskData.FileKnown.BAD ? TagsManager.getNotableTagLabel() : "";
+            if (passesTagNamesFilter(tag.getName().getDisplayName() + notableString) == false) {
                 continue;
             }
 
@@ -302,7 +327,7 @@ class TableReportGenerator {
                 fileName = tag.getContent().getName();
             }
 
-            ArrayList<String> rowData = new ArrayList<>(Arrays.asList(tag.getName().getDisplayName(), fileName, tag.getComment()));
+            ArrayList<String> rowData = new ArrayList<>(Arrays.asList(tag.getName().getDisplayName() + notableString, fileName, tag.getComment(), tag.getUserName()));
             Content content = tag.getContent();
             if (content instanceof AbstractFile) {
                 AbstractFile file = (AbstractFile) content;
@@ -341,8 +366,8 @@ class TableReportGenerator {
 
         List<BlackboardArtifactTag> tags;
         try {
-            tags = Case.getCurrentCase().getServices().getTagsManager().getAllBlackboardArtifactTags();
-        } catch (TskCoreException ex) {
+            tags = Case.getCurrentCaseThrows().getServices().getTagsManager().getAllBlackboardArtifactTags();
+        } catch (TskCoreException | NoCurrentCaseException ex) {
             errorList.add(NbBundle.getMessage(this.getClass(), "ReportGenerator.errList.failedGetBBArtifactTags"));
             logger.log(Level.SEVERE, "failed to get blackboard artifact tags", ex); //NON-NLS
             return;
@@ -364,16 +389,19 @@ class TableReportGenerator {
                 NbBundle.getMessage(this.getClass(), "ReportGenerator.tagTable.header.resultType"),
                 NbBundle.getMessage(this.getClass(), "ReportGenerator.tagTable.header.tag"),
                 NbBundle.getMessage(this.getClass(), "ReportGenerator.tagTable.header.comment"),
-                NbBundle.getMessage(this.getClass(), "ReportGenerator.tagTable.header.srcFile"))));
+                NbBundle.getMessage(this.getClass(), "ReportGenerator.tagTable.header.srcFile"),
+                NbBundle.getMessage(this.getClass(), "ReportGenerator.tagTable.header.userName"))));
 
         // Give the modules the rows for the content tags. 
         for (BlackboardArtifactTag tag : tags) {
-            if (passesTagNamesFilter(tag.getName().getDisplayName()) == false) {
+            String notableString = tag.getName().getKnownStatus() == TskData.FileKnown.BAD ? TagsManager.getNotableTagLabel() : "";
+            if (passesTagNamesFilter(tag.getName().getDisplayName() + notableString) == false) {
                 continue;
             }
 
             List<String> row;
-            row = new ArrayList<>(Arrays.asList(tag.getArtifact().getArtifactTypeName(), tag.getName().getDisplayName(), tag.getComment(), tag.getContent().getName()));
+            row = new ArrayList<>(Arrays.asList(tag.getArtifact().getArtifactTypeName(), tag.getName().getDisplayName() + notableString,
+                    tag.getComment(), tag.getContent().getName(), tag.getUserName()));
             tableReport.addRow(row);
 
             // check if the tag is an image that we should later make a thumbnail for
@@ -432,8 +460,8 @@ class TableReportGenerator {
     private void checkIfTagHasImage(BlackboardArtifactTag artifactTag) {
         AbstractFile file;
         try {
-            file = Case.getCurrentCase().getSleuthkitCase().getAbstractFileById(artifactTag.getArtifact().getObjectID());
-        } catch (TskCoreException ex) {
+            file = Case.getCurrentCaseThrows().getSleuthkitCase().getAbstractFileById(artifactTag.getArtifact().getObjectID());
+        } catch (TskCoreException | NoCurrentCaseException ex) {
             errorList.add(
                     NbBundle.getMessage(this.getClass(), "ReportGenerator.errList.errGetContentFromBBArtifact"));
             logger.log(Level.WARNING, "Error while getting content from a blackboard artifact to report on.", ex); //NON-NLS
@@ -500,6 +528,7 @@ class TableReportGenerator {
      * @param tableModule module to report on
      */
     @SuppressWarnings("deprecation")
+    @NbBundle.Messages({"ReportGenerator.errList.noOpenCase=No open case available."})
     private void writeKeywordHits(TableReportModule tableModule, String comment, HashSet<String> tagNamesFilter) {
 
         // Query for keyword lists-only so that we can tell modules what lists
@@ -508,25 +537,105 @@ class TableReportGenerator {
         // so that we only report the lists that we will later provide with real
         // hits.  If no keyord hits are tagged, then we make the page for nothing.
         String orderByClause;
-        if (Case.getCurrentCase().getCaseType() == Case.CaseType.MULTI_USER_CASE) {
-            orderByClause = "ORDER BY convert_to(att.value_text, 'SQL_ASCII') ASC NULLS FIRST"; //NON-NLS
+        Case openCase;
+        try {
+            openCase = Case.getCurrentCaseThrows();
+        } catch (NoCurrentCaseException ex) {
+            errorList.add(Bundle.ReportGenerator_errList_noOpenCase());
+            logger.log(Level.SEVERE, "Exception while getting open case: ", ex); //NON-NLS
+            return;
+        }
+
+        // Get a list of all selected tag IDs
+        String tagIDList = "";
+        if (!tagNamesFilter.isEmpty()) {
+            try {
+                Map<String, TagName> tagNamesMap = Case.getCurrentCaseThrows().getServices().getTagsManager().getDisplayNamesToTagNamesMap();
+                for (String tagDisplayName : tagNamesFilter) {
+                    if (tagNamesMap.containsKey(tagDisplayName)) {
+                        if (!tagIDList.isEmpty()) {
+                            tagIDList += ",";
+                        }
+                        tagIDList += tagNamesMap.get(tagDisplayName).getId();
+                    } else {
+                        // If the tag name ends with "(Notable)", try stripping that off
+                        if (tagDisplayName.endsWith(getNotableTagLabel())) {
+                            String editedDisplayName = tagDisplayName.substring(0, tagDisplayName.length() - getNotableTagLabel().length());
+                            if (tagNamesMap.containsKey(editedDisplayName)) {
+                                if (!tagIDList.isEmpty()) {
+                                    tagIDList += ",";
+                                }
+                                tagIDList += tagNamesMap.get(editedDisplayName).getId();
+                            }
+                        }
+                    }
+                }
+            } catch (NoCurrentCaseException | TskCoreException ex) {
+                logger.log(Level.SEVERE, "Exception while getting tag info - proceeding without tag filter: ", ex); //NON-NLS
+                tagIDList = "";
+            }
+        }
+
+        // Check if there are any ad-hoc results
+        String adHocCountQuery = "SELECT COUNT(*) FROM "
+                + //NON-NLS
+                "(SELECT art.artifact_id FROM blackboard_artifacts AS art, blackboard_attributes AS att1 ";//NON-NLS
+        if (!tagIDList.isEmpty()) {
+            adHocCountQuery += ", blackboard_artifact_tags as tag "; //NON-NLS
+        }
+        adHocCountQuery += "WHERE (att1.artifact_id = art.artifact_id) AND (art.artifact_type_id = " + BlackboardArtifact.ARTIFACT_TYPE.TSK_KEYWORD_HIT.getTypeID() + ") "; // NON-NLS
+        if (!tagIDList.isEmpty()) {
+            adHocCountQuery += " AND (art.artifact_id = tag.artifact_id) AND (tag.tag_name_id IN (" + tagIDList + ")) "; //NON-NLS
+        }
+        adHocCountQuery += "EXCEPT "
+                + // NON-NLS
+                "SELECT art.artifact_id FROM blackboard_artifacts AS art, blackboard_attributes AS att1 WHERE (att1.artifact_id = art.artifact_id) AND (art.artifact_type_id = " + BlackboardArtifact.ARTIFACT_TYPE.TSK_KEYWORD_HIT.getTypeID() + ") AND (att1.attribute_type_id = " + BlackboardAttribute.ATTRIBUTE_TYPE.TSK_SET_NAME.getTypeID() + ")) AS adHocHits"; //NON-NLS
+
+        int adHocCount = 0;
+        try (SleuthkitCase.CaseDbQuery dbQuery = openCase.getSleuthkitCase().executeQuery(adHocCountQuery)) {
+            ResultSet adHocCountResultSet = dbQuery.getResultSet();
+            if (adHocCountResultSet.next()) {
+                adHocCount = adHocCountResultSet.getInt(1); //NON-NLS
+            } else {
+                throw new TskCoreException("Error counting ad hoc keywords");
+            }
+        } catch (TskCoreException | SQLException ex) {
+            errorList.add(NbBundle.getMessage(this.getClass(), "ReportGenerator.errList.failedQueryKWLists"));
+            logger.log(Level.SEVERE, "Failed to count ad hoc searches with query " + adHocCountQuery, ex); //NON-NLS
+            return;
+        }
+
+        // Create the query to get the keyword list names
+        if (openCase.getCaseType() == Case.CaseType.MULTI_USER_CASE) {
+            orderByClause = "ORDER BY convert_to(list, 'SQL_ASCII') ASC NULLS FIRST"; //NON-NLS
         } else {
             orderByClause = "ORDER BY list ASC"; //NON-NLS
         }
         String keywordListQuery
                 = "SELECT att.value_text AS list "
                 + //NON-NLS
-                "FROM blackboard_attributes AS att, blackboard_artifacts AS art "
-                + //NON-NLS
-                "WHERE att.attribute_type_id = " + BlackboardAttribute.ATTRIBUTE_TYPE.TSK_SET_NAME.getTypeID() + " "
+                "FROM blackboard_attributes AS att, blackboard_artifacts AS art "; // NON-NLS
+        if (!tagIDList.isEmpty()) {
+            keywordListQuery += ", blackboard_artifact_tags as tag "; //NON-NLS
+        }
+        keywordListQuery += "WHERE att.attribute_type_id = " + BlackboardAttribute.ATTRIBUTE_TYPE.TSK_SET_NAME.getTypeID() + " "
                 + //NON-NLS
                 "AND art.artifact_type_id = " + BlackboardArtifact.ARTIFACT_TYPE.TSK_KEYWORD_HIT.getTypeID() + " "
                 + //NON-NLS
-                "AND att.artifact_id = art.artifact_id "
-                + //NON-NLS
-                "GROUP BY list " + orderByClause; //NON-NLS
+                "AND att.artifact_id = art.artifact_id ";
+        if (!tagIDList.isEmpty()) {
+            keywordListQuery += "AND (art.artifact_id = tag.artifact_id) "
+                    + //NON-NLS
+                    "AND (tag.tag_name_id IN (" + tagIDList + ")) "; //NON-NLS
+        }
+        if (adHocCount > 0) {
+            keywordListQuery += " UNION SELECT \'\' AS list ";
+        }
+        keywordListQuery = "SELECT * FROM ( " + keywordListQuery + " ) kwListNames ";
+        keywordListQuery += "GROUP BY list " + orderByClause; //NON-NLS
 
-        try (SleuthkitCase.CaseDbQuery dbQuery = Case.getCurrentCase().getSleuthkitCase().executeQuery(keywordListQuery)) {
+        // Make the table of contents links for each list type
+        try (SleuthkitCase.CaseDbQuery dbQuery = openCase.getSleuthkitCase().executeQuery(keywordListQuery)) {
             ResultSet listsRs = dbQuery.getResultSet();
             List<String> lists = new ArrayList<>();
             while (listsRs.next()) {
@@ -545,22 +654,24 @@ class TableReportGenerator {
                             BlackboardArtifact.ARTIFACT_TYPE.TSK_KEYWORD_HIT.getDisplayName()));
         } catch (TskCoreException | SQLException ex) {
             errorList.add(NbBundle.getMessage(this.getClass(), "ReportGenerator.errList.failedQueryKWLists"));
-            logger.log(Level.SEVERE, "Failed to query keyword lists: ", ex); //NON-NLS
+            logger.log(Level.SEVERE, "Failed to query keyword lists with query " + keywordListQuery, ex); //NON-NLS
             return;
         }
 
-        if (Case.getCurrentCase().getCaseType() == Case.CaseType.MULTI_USER_CASE) {
-            orderByClause = "ORDER BY convert_to(att3.value_text, 'SQL_ASCII') ASC NULLS FIRST, " //NON-NLS
-                    + "convert_to(att1.value_text, 'SQL_ASCII') ASC NULLS FIRST, " //NON-NLS
-                    + "convert_to(f.parent_path, 'SQL_ASCII') ASC NULLS FIRST, " //NON-NLS
-                    + "convert_to(f.name, 'SQL_ASCII') ASC NULLS FIRST, " //NON-NLS
-                    + "convert_to(att2.value_text, 'SQL_ASCII') ASC NULLS FIRST"; //NON-NLS
+        // Query for keywords, grouped by list
+        if (openCase.getCaseType() == Case.CaseType.MULTI_USER_CASE) {
+            orderByClause = "ORDER BY convert_to(list, 'SQL_ASCII') ASC NULLS FIRST, " //NON-NLS
+                    + "convert_to(keyword, 'SQL_ASCII') ASC NULLS FIRST, " //NON-NLS
+                    + "convert_to(parent_path, 'SQL_ASCII') ASC NULLS FIRST, " //NON-NLS
+                    + "convert_to(name, 'SQL_ASCII') ASC NULLS FIRST, " //NON-NLS
+                    + "convert_to(preview, 'SQL_ASCII') ASC NULLS FIRST"; //NON-NLS
         } else {
             orderByClause = "ORDER BY list ASC, keyword ASC, parent_path ASC, name ASC, preview ASC"; //NON-NLS
         }
-        // Query for keywords, grouped by list
-        String keywordsQuery
-                = "SELECT art.artifact_id, art.obj_id, att1.value_text AS keyword, att2.value_text AS preview, att3.value_text AS list, f.name AS name, f.parent_path AS parent_path "
+
+        // Query for keywords that are part of a list
+        String keywordListsQuery
+                = "SELECT art.artifact_id AS artifact_id, art.obj_id AS obj_id, att1.value_text AS keyword, att2.value_text AS preview, att3.value_text AS list, f.name AS name, f.parent_path AS parent_path "
                 + //NON-NLS
                 "FROM blackboard_artifacts AS art, blackboard_attributes AS att1, blackboard_attributes AS att2, blackboard_attributes AS att3, tsk_files AS f "
                 + //NON-NLS
@@ -578,11 +689,37 @@ class TableReportGenerator {
                 + //NON-NLS
                 "AND (att3.attribute_type_id = " + BlackboardAttribute.ATTRIBUTE_TYPE.TSK_SET_NAME.getTypeID() + ") "
                 + //NON-NLS
-                "AND (art.artifact_type_id = " + BlackboardArtifact.ARTIFACT_TYPE.TSK_KEYWORD_HIT.getTypeID() + ") "
-                + //NON-NLS
-                orderByClause; //NON-NLS
+                "AND (art.artifact_type_id = " + BlackboardArtifact.ARTIFACT_TYPE.TSK_KEYWORD_HIT.getTypeID() + ") ";
 
-        try (SleuthkitCase.CaseDbQuery dbQuery = Case.getCurrentCase().getSleuthkitCase().executeQuery(keywordsQuery)) {
+        // Query for keywords that are not part of a list
+        String keywordAdHocQuery
+                = "SELECT art.artifact_id AS artifact_id, art.obj_id AS obj_id, att1.value_text AS keyword, att2.value_text AS preview, \'\' AS list, f.name AS name, f.parent_path AS parent_path "
+                + // NON-NLS
+                "FROM blackboard_artifacts AS art, blackboard_attributes AS att1, blackboard_attributes AS att2, tsk_files AS f "
+                + // NON-NLS
+                "WHERE "
+                + // NON-NLS
+                " (art.artifact_id IN (SELECT art.artifact_id FROM blackboard_artifacts AS art, blackboard_attributes AS att1 WHERE (att1.artifact_id = art.artifact_id) AND (art.artifact_type_id = " + BlackboardArtifact.ARTIFACT_TYPE.TSK_KEYWORD_HIT.getTypeID() + ") "
+                + // NON-NLS
+                "EXCEPT "
+                + // NON-NLS
+                "SELECT art.artifact_id FROM blackboard_artifacts AS art, blackboard_attributes AS att1 WHERE (att1.artifact_id = art.artifact_id) AND (art.artifact_type_id = " + BlackboardArtifact.ARTIFACT_TYPE.TSK_KEYWORD_HIT.getTypeID() + ") AND (att1.attribute_type_id = " + BlackboardAttribute.ATTRIBUTE_TYPE.TSK_SET_NAME.getTypeID() + "))) "
+                + //NON-NLS
+                "AND (att1.artifact_id = art.artifact_id) "
+                + //NON-NLS
+                "AND (att2.artifact_id = art.artifact_id) "
+                + //NON-NLS
+                "AND (f.obj_id = art.obj_id) "
+                + //NON-NLS 
+                "AND (att1.attribute_type_id = " + BlackboardAttribute.ATTRIBUTE_TYPE.TSK_KEYWORD.getTypeID() + ") "
+                + // NON-NLS
+                "AND (att2.attribute_type_id = " + BlackboardAttribute.ATTRIBUTE_TYPE.TSK_KEYWORD_PREVIEW.getTypeID() + ") "
+                + // NON-NLS
+                "AND (art.artifact_type_id = " + BlackboardArtifact.ARTIFACT_TYPE.TSK_KEYWORD_HIT.getTypeID() + ") "; // NON-NLS
+
+        String keywordsQuery = "SELECT * FROM ( " + keywordListsQuery + " UNION " + keywordAdHocQuery + " ) kwHits " + orderByClause;
+
+        try (SleuthkitCase.CaseDbQuery dbQuery = openCase.getSleuthkitCase().executeQuery(keywordsQuery)) {
             ResultSet resultSet = dbQuery.getResultSet();
 
             String currentKeyword = "";
@@ -607,9 +744,9 @@ class TableReportGenerator {
                 String uniquePath = "";
 
                 try {
-                    AbstractFile f = Case.getCurrentCase().getSleuthkitCase().getAbstractFileById(objId);
+                    AbstractFile f = openCase.getSleuthkitCase().getAbstractFileById(objId);
                     if (f != null) {
-                        uniquePath = Case.getCurrentCase().getSleuthkitCase().getAbstractFileById(objId).getUniquePath();
+                        uniquePath = openCase.getSleuthkitCase().getAbstractFileById(objId).getUniquePath();
                     }
                 } catch (TskCoreException ex) {
                     errorList.add(
@@ -633,9 +770,12 @@ class TableReportGenerator {
                                     BlackboardArtifact.ARTIFACT_TYPE.TSK_KEYWORD_HIT.getDisplayName(), currentList));
                 }
                 if (!keyword.equals(currentKeyword)) {
+                    // End the previous table if one exists.
                     if (!currentKeyword.equals("")) {
                         tableModule.endTable();
                     }
+
+                    // Prepare for a new table.
                     currentKeyword = keyword;
                     tableModule.addSetElement(currentKeyword);
                     List<String> columnHeaderNames = new ArrayList<>();
@@ -645,8 +785,12 @@ class TableReportGenerator {
                     tableModule.startTable(columnHeaderNames);
                 }
 
-                String previewreplace = EscapeUtil.escapeHtml(preview);
-                tableModule.addRow(Arrays.asList(new String[]{previewreplace.replaceAll("<!", ""), uniquePath, tagsList}));
+                tableModule.addRow(Arrays.asList(new String[]{preview, uniquePath, tagsList}));
+            }
+
+            // End the previous table if one exists.
+            if (!currentKeyword.isEmpty()) {
+                tableModule.endTable();
             }
 
             // Finish the current data type
@@ -654,7 +798,7 @@ class TableReportGenerator {
             tableModule.endDataType();
         } catch (TskCoreException | SQLException ex) {
             errorList.add(NbBundle.getMessage(this.getClass(), "ReportGenerator.errList.failedQueryKWs"));
-            logger.log(Level.SEVERE, "Failed to query keywords: ", ex); //NON-NLS
+            logger.log(Level.SEVERE, "Failed to query keywords with query " + keywordsQuery, ex); //NON-NLS
         }
     }
 
@@ -666,7 +810,15 @@ class TableReportGenerator {
     @SuppressWarnings("deprecation")
     private void writeHashsetHits(TableReportModule tableModule, String comment, HashSet<String> tagNamesFilter) {
         String orderByClause;
-        if (Case.getCurrentCase().getCaseType() == Case.CaseType.MULTI_USER_CASE) {
+        Case openCase;
+        try {
+            openCase = Case.getCurrentCaseThrows();
+        } catch (NoCurrentCaseException ex) {
+            errorList.add(Bundle.ReportGenerator_errList_noOpenCase());
+            logger.log(Level.SEVERE, "Exception while getting open case: ", ex); //NON-NLS
+            return;
+        }
+        if (openCase.getCaseType() == Case.CaseType.MULTI_USER_CASE) {
             orderByClause = "ORDER BY convert_to(att.value_text, 'SQL_ASCII') ASC NULLS FIRST"; //NON-NLS
         } else {
             orderByClause = "ORDER BY att.value_text ASC"; //NON-NLS
@@ -684,7 +836,7 @@ class TableReportGenerator {
                 + //NON-NLS
                 "GROUP BY list " + orderByClause; //NON-NLS
 
-        try (SleuthkitCase.CaseDbQuery dbQuery = Case.getCurrentCase().getSleuthkitCase().executeQuery(hashsetsQuery)) {
+        try (SleuthkitCase.CaseDbQuery dbQuery = openCase.getSleuthkitCase().executeQuery(hashsetsQuery)) {
             // Query for hashsets
             ResultSet listsRs = dbQuery.getResultSet();
             List<String> lists = new ArrayList<>();
@@ -703,7 +855,7 @@ class TableReportGenerator {
             return;
         }
 
-        if (Case.getCurrentCase().getCaseType() == Case.CaseType.MULTI_USER_CASE) {
+        if (openCase.getCaseType() == Case.CaseType.MULTI_USER_CASE) {
             orderByClause = "ORDER BY convert_to(att.value_text, 'SQL_ASCII') ASC NULLS FIRST, " //NON-NLS
                     + "convert_to(f.parent_path, 'SQL_ASCII') ASC NULLS FIRST, " //NON-NLS
                     + "convert_to(f.name, 'SQL_ASCII') ASC NULLS FIRST, " //NON-NLS
@@ -726,7 +878,7 @@ class TableReportGenerator {
                 + //NON-NLS
                 orderByClause; //NON-NLS
 
-        try (SleuthkitCase.CaseDbQuery dbQuery = Case.getCurrentCase().getSleuthkitCase().executeQuery(hashsetHitsQuery)) {
+        try (SleuthkitCase.CaseDbQuery dbQuery = openCase.getSleuthkitCase().executeQuery(hashsetHitsQuery)) {
             // Query for hashset hits
             ResultSet resultSet = dbQuery.getResultSet();
             String currentSet = "";
@@ -749,9 +901,9 @@ class TableReportGenerator {
                 String uniquePath = "";
 
                 try {
-                    AbstractFile f = Case.getCurrentCase().getSleuthkitCase().getAbstractFileById(objId);
+                    AbstractFile f = openCase.getSleuthkitCase().getAbstractFileById(objId);
                     if (f != null) {
-                        uniquePath = Case.getCurrentCase().getSleuthkitCase().getAbstractFileById(objId).getUniquePath();
+                        uniquePath = openCase.getSleuthkitCase().getAbstractFileById(objId).getUniquePath();
                     }
                 } catch (TskCoreException ex) {
                     errorList.add(
@@ -815,9 +967,9 @@ class TableReportGenerator {
             this.attributes = attrs;
             this.tags = tags;
             try {
-                this.content = Case.getCurrentCase().getSleuthkitCase().getContentById(artifact.getObjectID());
-            } catch (TskCoreException ex) {
-                logger.log(Level.SEVERE, "Could not get content from database");
+                this.content = Case.getCurrentCaseThrows().getSleuthkitCase().getContentById(artifact.getObjectID());
+            } catch (TskCoreException | NoCurrentCaseException ex) {
+                logger.log(Level.SEVERE, "Could not get content from database", ex);
             }
         }
 
@@ -938,13 +1090,17 @@ class TableReportGenerator {
                 orderedRowData.add(makeCommaSeparatedList(getTags()));
 
             } else if (BlackboardArtifact.ARTIFACT_TYPE.TSK_INTERESTING_FILE_HIT.getTypeID() == getArtifact().getArtifactTypeID()) {
-                String[] attributeDataArray = new String[3];
+                String[] attributeDataArray = new String[5];
                 // Array is used so that order of the attributes is maintained.
                 for (BlackboardAttribute attr : attributes) {
                     if (attr.getAttributeType().equals(new BlackboardAttribute.Type(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_SET_NAME))) {
                         attributeDataArray[0] = attr.getDisplayString();
                     } else if (attr.getAttributeType().equals(new BlackboardAttribute.Type(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_CATEGORY))) {
                         attributeDataArray[1] = attr.getDisplayString();
+                    } else if (attr.getAttributeType().equals(new BlackboardAttribute.Type(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_COMMENT))) {
+                        attributeDataArray[3] = attr.getDisplayString();
+                    } else if (attr.getAttributeType().equals(new BlackboardAttribute.Type(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_DESCRIPTION))) {
+                        attributeDataArray[4] = attr.getDisplayString();
                     }
                 }
 
@@ -953,11 +1109,12 @@ class TableReportGenerator {
 
                 HashSet<String> allTags = getTags();
                 try {
-                    List<ContentTag> contentTags = Case.getCurrentCase().getServices().getTagsManager().getContentTagsByContent(content);
+                    List<ContentTag> contentTags = Case.getCurrentCaseThrows().getServices().getTagsManager().getContentTagsByContent(content);
                     for (ContentTag ct : contentTags) {
-                        allTags.add(ct.getName().getDisplayName());
+                        String notableString = ct.getName().getKnownStatus() == TskData.FileKnown.BAD ? TagsManager.getNotableTagLabel() : "";
+                        allTags.add(ct.getName().getDisplayName() + notableString);
                     }
-                } catch (TskCoreException ex) {
+                } catch (TskCoreException | NoCurrentCaseException ex) {
                     errorList.add(NbBundle.getMessage(this.getClass(), "ReportGenerator.errList.failedGetContentTags"));
                     logger.log(Level.SEVERE, "Failed to get content tags", ex); //NON-NLS
                 }
@@ -988,23 +1145,24 @@ class TableReportGenerator {
     private List<ArtifactData> getFilteredArtifacts(BlackboardArtifact.Type type, HashSet<String> tagNamesFilter) {
         List<ArtifactData> artifacts = new ArrayList<>();
         try {
-            for (BlackboardArtifact artifact : Case.getCurrentCase().getSleuthkitCase().getBlackboardArtifacts(type.getTypeID())) {
-                List<BlackboardArtifactTag> tags = Case.getCurrentCase().getServices().getTagsManager().getBlackboardArtifactTagsByArtifact(artifact);
+            for (BlackboardArtifact artifact : Case.getCurrentCaseThrows().getSleuthkitCase().getBlackboardArtifacts(type.getTypeID())) {
+                List<BlackboardArtifactTag> tags = Case.getCurrentCaseThrows().getServices().getTagsManager().getBlackboardArtifactTagsByArtifact(artifact);
                 HashSet<String> uniqueTagNames = new HashSet<>();
                 for (BlackboardArtifactTag tag : tags) {
-                    uniqueTagNames.add(tag.getName().getDisplayName());
+                    String notableString = tag.getName().getKnownStatus() == TskData.FileKnown.BAD ? TagsManager.getNotableTagLabel() : "";
+                    uniqueTagNames.add(tag.getName().getDisplayName() + notableString);
                 }
                 if (failsTagFilter(uniqueTagNames, tagNamesFilter)) {
                     continue;
                 }
                 try {
-                    artifacts.add(new ArtifactData(artifact, Case.getCurrentCase().getSleuthkitCase().getBlackboardAttributes(artifact), uniqueTagNames));
+                    artifacts.add(new ArtifactData(artifact, Case.getCurrentCaseThrows().getSleuthkitCase().getBlackboardAttributes(artifact), uniqueTagNames));
                 } catch (TskCoreException ex) {
                     errorList.add(NbBundle.getMessage(this.getClass(), "ReportGenerator.errList.failedGetBBAttribs"));
                     logger.log(Level.SEVERE, "Failed to get Blackboard Attributes when generating report.", ex); //NON-NLS
                 }
             }
-        } catch (TskCoreException ex) {
+        } catch (TskCoreException | NoCurrentCaseException ex) {
             errorList.add(NbBundle.getMessage(this.getClass(), "ReportGenerator.errList.failedGetBBArtifacts"));
             logger.log(Level.SEVERE, "Failed to get Blackboard Artifacts when generating report.", ex); //NON-NLS
         }
@@ -1031,6 +1189,7 @@ class TableReportGenerator {
      *
      * @return List<String> row titles
      */
+    @Messages({"ReportGenerator.artTableColHdr.comment=Comment"})
     private List<Column> getArtifactTableColumns(int artifactTypeId, Set<BlackboardAttribute.Type> attributeTypeSet) {
         ArrayList<Column> columns = new ArrayList<>();
 
@@ -1097,6 +1256,7 @@ class TableReportGenerator {
             columns.add(new AttributeColumn(NbBundle.getMessage(this.getClass(), "ReportGenerator.artTableColHdr.program"),
                     new BlackboardAttribute.Type(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_PROG_NAME)));
 
+            attributeTypeSet.remove(new Type(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_PATH_ID));
         } else if (BlackboardArtifact.ARTIFACT_TYPE.TSK_RECENT_OBJECT.getTypeID() == artifactTypeId) {
             columns.add(new AttributeColumn(NbBundle.getMessage(this.getClass(), "ReportGenerator.artTableColHdr.path"),
                     new BlackboardAttribute.Type(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_PATH)));
@@ -1104,6 +1264,7 @@ class TableReportGenerator {
             columns.add(new AttributeColumn(NbBundle.getMessage(this.getClass(), "ReportGenerator.artTableColHdr.dateTime"),
                     new BlackboardAttribute.Type(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_DATETIME)));
 
+            attributeTypeSet.remove(new Type(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_PATH_ID));
         } else if (BlackboardArtifact.ARTIFACT_TYPE.TSK_INSTALLED_PROG.getTypeID() == artifactTypeId) {
             columns.add(new AttributeColumn(NbBundle.getMessage(this.getClass(), "ReportGenerator.artTableColHdr.progName"),
                     new BlackboardAttribute.Type(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_PROG_NAME)));
@@ -1364,7 +1525,8 @@ class TableReportGenerator {
             columns.add(new AttributeColumn(NbBundle.getMessage(this.getClass(), "ReportGenerator.artTableColHdr.mailServer"),
                     new BlackboardAttribute.Type(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_SERVER_NAME)));
 
-        } else if (BlackboardArtifact.ARTIFACT_TYPE.TSK_ENCRYPTION_DETECTED.getTypeID() == artifactTypeId) {
+        } else if (BlackboardArtifact.ARTIFACT_TYPE.TSK_ENCRYPTION_DETECTED.getTypeID() == artifactTypeId
+                || BlackboardArtifact.ARTIFACT_TYPE.TSK_ENCRYPTION_SUSPECTED.getTypeID() == artifactTypeId) {
             columns.add(new AttributeColumn(NbBundle.getMessage(this.getClass(), "ReportGenerator.artTableColHdr.name"),
                     new BlackboardAttribute.Type(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_NAME)));
 
@@ -1424,6 +1586,12 @@ class TableReportGenerator {
 
             columns.add(new AttributeColumn(NbBundle.getMessage(this.getClass(), "ReportGenerator.artTableColHdr.tskPath"),
                     new BlackboardAttribute.Type(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_PATH)));
+
+            columns.add(new AttributeColumn(NbBundle.getMessage(this.getClass(), "ReportGenerator.artTableColHdr.comment"),
+                    new BlackboardAttribute.Type(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_COMMENT)));
+
+            columns.add(new AttributeColumn(NbBundle.getMessage(this.getClass(), "ReportGenerator.artTableColHdr.description"),
+                    new BlackboardAttribute.Type(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_DESCRIPTION)));
 
         } else if (BlackboardArtifact.ARTIFACT_TYPE.TSK_GPS_ROUTE.getTypeID() == artifactTypeId) {
             columns.add(new AttributeColumn(NbBundle.getMessage(this.getClass(), "ReportGenerator.artTableColHdr.tskGpsRouteCategory"),
@@ -1494,7 +1662,9 @@ class TableReportGenerator {
             attributeTypeSet.remove(new Type(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_ACCOUNT_TYPE));
             attributeTypeSet.remove(new Type(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_ASSOCIATED_ARTIFACT));
             attributeTypeSet.remove(new Type(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_SET_NAME));
-            attributeTypeSet.remove(new Type(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_KEYWORD_SEARCH_DOCUMENT_ID));            
+            attributeTypeSet.remove(new Type(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_KEYWORD_SEARCH_DOCUMENT_ID));
+        } else if (artifactTypeId == BlackboardArtifact.ARTIFACT_TYPE.TSK_WEB_CACHE.getTypeID()) {
+            attributeTypeSet.remove(new Type(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_PATH_ID));
         } else {
             // This is the case that it is a custom type. The reason an else is 
             // necessary is to make sure that the source file column is added
@@ -1539,6 +1709,7 @@ class TableReportGenerator {
                 || artifactTypeId == BlackboardArtifact.ARTIFACT_TYPE.TSK_GPS_SEARCH.getTypeID()
                 || artifactTypeId == BlackboardArtifact.ARTIFACT_TYPE.TSK_SERVICE_ACCOUNT.getTypeID()
                 || artifactTypeId == BlackboardArtifact.ARTIFACT_TYPE.TSK_ENCRYPTION_DETECTED.getTypeID()
+                || artifactTypeId == BlackboardArtifact.ARTIFACT_TYPE.TSK_ENCRYPTION_SUSPECTED.getTypeID()
                 || artifactTypeId == BlackboardArtifact.ARTIFACT_TYPE.TSK_OS_INFO.getTypeID()) {
             columns.add(new SourceFileColumn(NbBundle.getMessage(this.getClass(), "ReportGenerator.artTableColHdr.srcFile")));
         }
@@ -1582,16 +1753,17 @@ class TableReportGenerator {
     private HashSet<String> getUniqueTagNames(long artifactId) throws TskCoreException {
         HashSet<String> uniqueTagNames = new HashSet<>();
 
-        String query = "SELECT display_name, artifact_id FROM tag_names AS tn, blackboard_artifact_tags AS bat "
+        String query = "SELECT display_name, artifact_id, knownStatus FROM tag_names AS tn, blackboard_artifact_tags AS bat "
                 + //NON-NLS 
                 "WHERE tn.tag_name_id = bat.tag_name_id AND bat.artifact_id = " + artifactId; //NON-NLS
 
-        try (SleuthkitCase.CaseDbQuery dbQuery = Case.getCurrentCase().getSleuthkitCase().executeQuery(query)) {
+        try (SleuthkitCase.CaseDbQuery dbQuery = Case.getCurrentCaseThrows().getSleuthkitCase().executeQuery(query)) {
             ResultSet tagNameRows = dbQuery.getResultSet();
             while (tagNameRows.next()) {
-                uniqueTagNames.add(tagNameRows.getString("display_name")); //NON-NLS
+                String notableString = tagNameRows.getInt("knownStatus") == TskData.FileKnown.BAD.ordinal() ? getNotableTagLabel() : "";
+                uniqueTagNames.add(tagNameRows.getString("display_name") + notableString); //NON-NLS
             }
-        } catch (TskCoreException | SQLException ex) {
+        } catch (TskCoreException | SQLException | NoCurrentCaseException ex) {
             throw new TskCoreException("Error getting tag names for artifact: ", ex);
         }
 

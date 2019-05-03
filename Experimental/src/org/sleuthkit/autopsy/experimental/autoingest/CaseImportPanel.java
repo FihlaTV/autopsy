@@ -1,7 +1,7 @@
 /*
  * Autopsy Forensic Browser
  *
- * Copyright 2015 Basis Technology Corp.
+ * Copyright 2015-2018 Basis Technology Corp.
  * Contact: carrier <at> sleuthkit <dot> org
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,7 +19,6 @@
 package org.sleuthkit.autopsy.experimental.autoingest;
 
 import java.awt.Color;
-import java.awt.Cursor;
 import java.awt.Desktop;
 import java.awt.EventQueue;
 import java.awt.Font;
@@ -39,13 +38,12 @@ import org.sleuthkit.datamodel.SleuthkitCase;
 import org.sleuthkit.datamodel.TskCoreException;
 import java.util.logging.Level;
 import org.sleuthkit.autopsy.experimental.configuration.AutoIngestUserPreferences;
-import static org.sleuthkit.autopsy.experimental.configuration.AutoIngestUserPreferences.SelectedMode.AUTOMATED;
 
 /**
  * This panel shows up in a tab pane next to the copy files panel for the
  * automated ingest copy node.
- *
  */
+@SuppressWarnings("PMD.SingularField") // UI widgets cause lots of false positives
 public class CaseImportPanel extends javax.swing.JPanel implements ImportDoneCallback {
 
     private final CaseImportPanelController controller;
@@ -108,7 +106,7 @@ public class CaseImportPanel extends javax.swing.JPanel implements ImportDoneCal
         if (!UserPreferences.getIsMultiUserModeEnabled()) {
             tbOops.setText(MULTI_USER_SETTINGS_MUST_BE_ENABLED);
             return;
-        } else if (RuntimeProperties.coreComponentsAreActive()) {
+        } else if (RuntimeProperties.runningWithGUI()) {
             tbOops.setText(AIM_MUST_BE_ENABLED);
             return;
         } else {
@@ -673,8 +671,7 @@ public class CaseImportPanel extends javax.swing.JPanel implements ImportDoneCal
      */
     private void enableStartButton() {
         if (UserPreferences.getIsMultiUserModeEnabled()
-                && AutoIngestUserPreferences.getJoinAutoModeCluster()
-                && (! RuntimeProperties.coreComponentsAreActive())
+                && (! RuntimeProperties.runningWithGUI())
                 && !tbCaseSource.getText().isEmpty()
                 && !tbCaseDestination.getText().isEmpty()
                 && canTalkToDb == true

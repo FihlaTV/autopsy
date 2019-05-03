@@ -25,6 +25,7 @@ import org.openide.util.NbBundle;
 import org.sleuthkit.autopsy.datamodel.FileTypes.FileTypesNode;
 import org.sleuthkit.autopsy.datamodel.accounts.Accounts;
 import org.sleuthkit.autopsy.datamodel.accounts.Accounts.AccountsRootNode;
+import org.sleuthkit.datamodel.BlackboardArtifact;
 import org.sleuthkit.datamodel.Content;
 import org.sleuthkit.datamodel.DerivedFile;
 import org.sleuthkit.datamodel.Directory;
@@ -32,6 +33,7 @@ import org.sleuthkit.datamodel.File;
 import org.sleuthkit.datamodel.Image;
 import org.sleuthkit.datamodel.LayoutFile;
 import org.sleuthkit.datamodel.LocalFile;
+import org.sleuthkit.datamodel.LocalDirectory;
 import org.sleuthkit.datamodel.SlackFile;
 import org.sleuthkit.datamodel.SleuthkitItemVisitor;
 import org.sleuthkit.datamodel.SleuthkitVisitableItem;
@@ -51,7 +53,11 @@ abstract class AbstractContentChildren<T> extends Keys<T> {
      * Uses lazy Content.Keys
      */
     AbstractContentChildren() {
-        super(true); // use lazy behavior
+        /*
+         * This was turned off because we were getting out of memory errors when
+         * the filter nodes were hiding nodes. Turning this off seemed to help
+         */
+        super(false); //don't use lazy behavior
     }
 
     @Override
@@ -109,8 +115,18 @@ abstract class AbstractContentChildren<T> extends Keys<T> {
         }
 
         @Override
+        public AbstractContentNode<? extends Content> visit(LocalDirectory ld) {
+            return new LocalDirectoryNode(ld);
+        }
+
+        @Override
         public AbstractContentNode<? extends Content> visit(SlackFile sf) {
             return new SlackFileNode(sf);
+        }
+
+        @Override
+        public AbstractContentNode<? extends Content> visit(BlackboardArtifact art) {
+            return new BlackboardArtifactNode(art);
         }
 
         @Override
@@ -136,7 +152,7 @@ abstract class AbstractContentChildren<T> extends Keys<T> {
 
         @Override
         public AbstractNode visit(FileTypesByExtension sf) {
-            return new org.sleuthkit.autopsy.datamodel.FileTypesByExtension.FileTypesByExtNode(sf.getSleuthkitCase(), null);
+            return sf.new FileTypesByExtNode(sf.getSleuthkitCase(), null);
         }
 
         @Override
@@ -146,12 +162,12 @@ abstract class AbstractContentChildren<T> extends Keys<T> {
 
         @Override
         public AbstractNode visit(DeletedContent dc) {
-            return new DeletedContent.DeletedContentsNode(dc.getSleuthkitCase());
+            return new DeletedContent.DeletedContentsNode(dc.getSleuthkitCase(), dc.filteringDataSourceObjId());
         }
 
         @Override
         public AbstractNode visit(FileSize dc) {
-            return new FileSize.FileSizeRootNode(dc.getSleuthkitCase());
+            return new FileSize.FileSizeRootNode(dc.getSleuthkitCase(), dc.filteringDataSourceObjId());
         }
 
         @Override
@@ -176,27 +192,32 @@ abstract class AbstractContentChildren<T> extends Keys<T> {
 
         @Override
         public AbstractNode visit(Tags tagsNodeKey) {
-            return tagsNodeKey.new RootNode();
+            return tagsNodeKey.new RootNode(tagsNodeKey.filteringDataSourceObjId());
         }
 
         @Override
         public AbstractNode visit(DataSources i) {
-            return new DataSourcesNode();
+            return new DataSourcesNode(i.filteringDataSourceObjId());
         }
 
+        @Override
+        public AbstractNode visit(DataSourceGrouping datasourceGrouping) {
+            return new DataSourceGroupingNode(datasourceGrouping.getDataSource());
+        }
+        
         @Override
         public AbstractNode visit(Views v) {
-            return new ViewsNode(v.getSleuthkitCase());
+            return new ViewsNode(v.getSleuthkitCase(), v.filteringDataSourceObjId());
         }
 
         @Override
-        public AbstractNode visit(Results r) {
-            return new ResultsNode(r.getSleuthkitCase());
+        public AbstractNode visit(Results results) {
+            return new ResultsNode(results.getSleuthkitCase(), results.filteringDataSourceObjId() );
         }
 
         @Override
         public AbstractNode visit(FileTypes ft) {
-            return new FileTypesNode(ft.getSleuthkitCase());
+            return ft.new FileTypesNode();
         }
 
         @Override

@@ -1,7 +1,7 @@
 /*
  * Autopsy Forensic Browser
  * 
- * Copyright 2011-2014 Basis Technology Corp.
+ * Copyright 2011-2018 Basis Technology Corp.
  * Contact: carrier <at> sleuthkit <dot> org
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -38,8 +38,9 @@ import org.sleuthkit.datamodel.Content;
 import org.sleuthkit.datamodel.TskCoreException;
 
 /**
- *
+ * Data content panel.
  */
+@SuppressWarnings("PMD.SingularField") // UI widgets cause lots of false positives
 public class DataContentPanel extends javax.swing.JPanel implements DataContent, ChangeListener {
 
     private static Logger logger = Logger.getLogger(DataContentPanel.class.getName());
@@ -73,8 +74,10 @@ public class DataContentPanel extends javax.swing.JPanel implements DataContent,
                 dcv = factory.createInstance();
             }
             viewers.add(new UpdateWrapper(dcv));
+            javax.swing.JScrollPane scrollTab = new javax.swing.JScrollPane(dcv.getComponent());
+            scrollTab.setVerticalScrollBarPolicy(javax.swing.JScrollPane.VERTICAL_SCROLLBAR_NEVER);
             jTabbedPane1.addTab(dcv.getTitle(), null,
-                    dcv.getComponent(), dcv.getToolTip());
+                    scrollTab, dcv.getToolTip());
         }
 
         // disable the tabs
@@ -115,11 +118,11 @@ public class DataContentPanel extends javax.swing.JPanel implements DataContent,
         this.setLayout(layout);
         layout.setHorizontalGroup(
             layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addComponent(jTabbedPane1, javax.swing.GroupLayout.DEFAULT_SIZE, 400, Short.MAX_VALUE)
+            .addComponent(jTabbedPane1)
         );
         layout.setVerticalGroup(
             layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addComponent(jTabbedPane1, javax.swing.GroupLayout.DEFAULT_SIZE, 300, Short.MAX_VALUE)
+            .addComponent(jTabbedPane1)
         );
     }// </editor-fold>//GEN-END:initComponents
     // Variables declaration - do not modify//GEN-BEGIN:variables
@@ -210,6 +213,7 @@ public class DataContentPanel extends javax.swing.JPanel implements DataContent,
 
         // set the tab to the one the user wants, then set that viewer's node.
         jTabbedPane1.setSelectedIndex(tabIndex);
+        jTabbedPane1.getSelectedComponent().repaint();
     }
 
     @Override
@@ -238,7 +242,7 @@ public class DataContentPanel extends javax.swing.JPanel implements DataContent,
 
     private static class UpdateWrapper {
 
-        private DataContentViewer wrapped;
+        private final DataContentViewer wrapped;
         private boolean outdated;
 
         UpdateWrapper(DataContentViewer wrapped) {

@@ -1,7 +1,7 @@
 /*
  * Autopsy Forensic Browser
  *
- * Copyright 2011-2016 Basis Technology Corp.
+ * Copyright 2011-2018 Basis Technology Corp.
  * Contact: carrier <at> sleuthkit <dot> org
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -51,6 +51,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.joda.time.Interval;
 import org.netbeans.api.progress.ProgressHandle;
 import org.openide.util.NbBundle;
+import org.openide.windows.WindowManager;
 import org.sleuthkit.autopsy.casemodule.Case;
 import org.sleuthkit.autopsy.casemodule.services.TagsManager;
 import org.sleuthkit.autopsy.coreutils.Logger;
@@ -71,6 +72,7 @@ import org.sleuthkit.autopsy.timeline.zooming.ZoomParams;
 import org.sleuthkit.datamodel.AbstractFile;
 import org.sleuthkit.datamodel.BlackboardArtifact;
 import org.sleuthkit.datamodel.BlackboardArtifactTag;
+import org.sleuthkit.datamodel.Content;
 import org.sleuthkit.datamodel.ContentTag;
 import org.sleuthkit.datamodel.SleuthkitCase;
 import org.sleuthkit.datamodel.Tag;
@@ -95,7 +97,7 @@ import org.sleuthkit.datamodel.TskData;
  */
 public class EventsRepository {
 
-    private final static Logger LOGGER = Logger.getLogger(EventsRepository.class.getName());
+    private final static Logger logger = Logger.getLogger(EventsRepository.class.getName());
 
     private final Executor workerExecutor = Executors.newSingleThreadExecutor(new ThreadFactoryBuilder().setNameFormat("eventrepository-worker-%d").build()); //NON-NLS
     private DBPopulationWorker dbWorker;
@@ -194,7 +196,7 @@ public class EventsRepository {
         try {
             return eventStripeCache.get(params);
         } catch (ExecutionException ex) {
-            LOGGER.log(Level.SEVERE, "Failed to load Event Stripes from cache for " + params.toString(), ex); //NON-NLS
+            logger.log(Level.SEVERE, "Failed to load Event Stripes from cache for " + params.toString(), ex); //NON-NLS
             return Collections.emptyList();
         }
     }
@@ -302,7 +304,7 @@ public class EventsRepository {
             try {
                 datasourcesMap.putIfAbsent(id, skCase.getContentById(id).getDataSource().getName());
             } catch (TskCoreException ex) {
-                LOGGER.log(Level.SEVERE, "Failed to get datasource by ID.", ex); //NON-NLS
+                logger.log(Level.SEVERE, "Failed to get datasource by ID.", ex); //NON-NLS
             }
         }
 
@@ -310,7 +312,7 @@ public class EventsRepository {
             //should this only be tags applied to files or event bearing artifacts?
             tagNames.setAll(skCase.getTagNamesInUse());
         } catch (TskCoreException ex) {
-            LOGGER.log(Level.SEVERE, "Failed to get tag names in use.", ex); //NON-NLS
+            logger.log(Level.SEVERE, "Failed to get tag names in use.", ex); //NON-NLS
         }
     }
 
@@ -337,7 +339,7 @@ public class EventsRepository {
         try {
             tagNames.setAll(autoCase.getSleuthkitCase().getTagNamesInUse());
         } catch (TskCoreException ex) {
-            LOGGER.log(Level.SEVERE, "Failed to get tag names in use.", ex); //NON-NLS
+            logger.log(Level.SEVERE, "Failed to get tag names in use.", ex); //NON-NLS
         }
     }
 
@@ -407,7 +409,7 @@ public class EventsRepository {
      */
     @ThreadConfined(type = ThreadConfined.ThreadType.JFX)
     private CancellationProgressTask<Void> rebuildRepository(final DBPopulationMode mode, Consumer<Worker.State> onStateChange) {
-        LOGGER.log(Level.INFO, "(re)starting {0} db population task", mode); //NON-NLS
+        logger.log(Level.INFO, "(re)starting {0} db population task", mode); //NON-NLS
         if (dbWorker != null) {
             dbWorker.cancel();
         }
@@ -512,7 +514,7 @@ public class EventsRepository {
 
             if (dbPopulationMode == DBPopulationMode.FULL) {
                 //drop old db, and add back MAC and artifact events
-                LOGGER.log(Level.INFO, "Beginning population of timeline db."); // NON-NLS
+                logger.log(Level.INFO, "Beginning population of timeline db."); // NON-NLS
                 restartProgressHandle(Bundle.progressWindow_msg_gatheringData(), "", -1D, 1, true);
                 //reset database //TODO: can we do more incremental updates? -jm
                 eventDB.reInitializeDB();
@@ -529,23 +531,23 @@ public class EventsRepository {
             //tags
             if (dbPopulationMode == DBPopulationMode.TAGS_ONLY) {
                 trans = eventDB.beginTransaction();
-                LOGGER.log(Level.INFO, "dropping old tags"); // NON-NLS
+                logger.log(Level.INFO, "dropping old tags"); // NON-NLS
                 eventDB.reInitializeTags();
             }
 
-            LOGGER.log(Level.INFO, "updating content tags"); // NON-NLS
+            logger.log(Level.INFO, "updating content tags"); // NON-NLS
             List<ContentTag> contentTags = tagsManager.getAllContentTags();
             int currentWorkTotal = contentTags.size();
             restartProgressHandle(Bundle.progressWindow_msg_refreshingFileTags(), "", 0D, currentWorkTotal, true);
             insertContentTags(currentWorkTotal, contentTags, trans);
 
-            LOGGER.log(Level.INFO, "updating artifact tags"); // NON-NLS
+            logger.log(Level.INFO, "updating artifact tags"); // NON-NLS
             List<BlackboardArtifactTag> artifactTags = tagsManager.getAllBlackboardArtifactTags();
             currentWorkTotal = artifactTags.size();
             restartProgressHandle(Bundle.progressWindow_msg_refreshingResultTags(), "", 0D, currentWorkTotal, true);
             insertArtifactTags(currentWorkTotal, artifactTags, trans);
 
-            LOGGER.log(Level.INFO, "committing db"); // NON-NLS
+            logger.log(Level.INFO, "committing db"); // NON-NLS
             Platform.runLater(() -> cancellable.set(false));
             restartProgressHandle(Bundle.progressWindow_msg_commitingDb(), "", -1D, 1, false);
             eventDB.commitTransaction(trans);
@@ -609,14 +611,14 @@ public class EventsRepository {
                     AbstractFile f = skCase.getAbstractFileById(fID);
 
                     if (isNull(f)) {
-                        LOGGER.log(Level.WARNING, "Failed to get data for file : {0}", fID); // NON-NLS
+                        logger.log(Level.WARNING, "Failed to get data for file : {0}", fID); // NON-NLS
                     } else {
                         insertEventsForFile(f, trans);
                         updateProgress(i, numFiles);
                         updateMessage(f.getName());
                     }
                 } catch (TskCoreException tskCoreException) {
-                    LOGGER.log(Level.SEVERE, "Failed to insert MAC time events for file : " + fID, tskCoreException); // NON-NLS
+                    logger.log(Level.SEVERE, "Failed to insert MAC time events for file : " + fID, tskCoreException); // NON-NLS
                 }
             }
         }
@@ -669,11 +671,11 @@ public class EventsRepository {
             try {
                 get();
             } catch (CancellationException ex) {
-                LOGGER.log(Level.WARNING, "Timeline database population was cancelled by the user. " //NON-NLS
+                logger.log(Level.WARNING, "Timeline database population was cancelled by the user. " //NON-NLS
                         + " Not all events may be present or accurate."); // NON-NLS
             } catch (Exception ex) {
-                LOGGER.log(Level.WARNING, "Unexpected exception while populating database.", ex); // NON-NLS
-                JOptionPane.showMessageDialog(null, Bundle.msgdlg_problem_text());
+                logger.log(Level.WARNING, "Unexpected exception while populating database.", ex); // NON-NLS
+                JOptionPane.showMessageDialog(WindowManager.getDefault().getMainWindow(), Bundle.msgdlg_problem_text());
             }
         }
 
@@ -696,11 +698,11 @@ public class EventsRepository {
                         insertEventForArtifact(type, blackboardArtifacts.get(i), trans);
                         updateProgress(i, numArtifacts);
                     } catch (TskCoreException ex) {
-                        LOGGER.log(Level.SEVERE, "There was a problem inserting event for artifact: " + blackboardArtifacts.get(i).getArtifactID(), ex); // NON-NLS
+                        logger.log(Level.SEVERE, "There was a problem inserting event for artifact: " + blackboardArtifacts.get(i).getArtifactID(), ex); // NON-NLS
                     }
                 }
             } catch (TskCoreException ex) {
-                LOGGER.log(Level.SEVERE, "There was a problem getting events with sub type " + type.toString() + ".", ex); // NON-NLS
+                logger.log(Level.SEVERE, "There was a problem getting events with sub type " + type.toString() + ".", ex); // NON-NLS
             }
         }
 
@@ -710,10 +712,10 @@ public class EventsRepository {
             // if the time is legitimate ( greater than zero ) insert it into the db
             if (eventDescription != null && eventDescription.getTime() > 0) {
                 long objectID = bbart.getObjectID();
-                AbstractFile f = skCase.getAbstractFileById(objectID);
-                long datasourceID = f.getDataSource().getId();
+                Content content = skCase.getContentById(objectID);
+                long datasourceID = content.getDataSource().getId();
                 long artifactID = bbart.getArtifactID();
-                Set<String> hashSets = f.getHashSetNames();
+                Set<String> hashSets = content.getHashSetNames();
                 List<BlackboardArtifactTag> tags = tagsManager.getBlackboardArtifactTagsByArtifact(bbart);
                 String fullDescription = eventDescription.getFullDescription();
                 String medDescription = eventDescription.getMedDescription();

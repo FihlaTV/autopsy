@@ -1,6 +1,8 @@
 /*! \page tagging_page Tagging
 
-Tagging (or Bookmarking) allows you to create a reference to a file or object and easily find it later.
+Tagging (or Bookmarking) allows you to create a reference to a file or object and easily find it later. Tagging is also used by the \ref central_repo_page "central repository" to mark items as notable.
+
+\section tagging_items Tagging items
 
 When an interesting item is discovered, the user can tag it by right-clicking the item and selecting one of the tag options.
 
@@ -12,15 +14,23 @@ Which to choose depends upon the context and what you desire in the final report
 
 \image html tagging-1.PNG
 
-Once you have chosen to tag the file or the result, there are two more options:
-- Quick Tag -- use this if you just want the tag
+At this point there are three options:
+- Use one of the existing tags to add it to the file/result without a comment
 - Tag and Comment -- use this if you need to add a comment about this tag
 
 \image html tagging-2.PNG
-<br>
-You can create arbitrary tag names. Autopsy remembers your tag names from previous cases, so choose wisely. Choose a tag from the list you have created, or create a "New Tag".
 
-\image html tagging-3.PNG
+- New tag -- Create a new tag and add it to the file/result
+
+\image html tagging_new_tag.png
+
+There are several default tag names:
+- Bookmark - Default tag for marking files of interest
+- CAT-1 through CAT-5 - For law enforcement use
+- Follow Up - Default tag for marking files to follow up on
+- Notable item - Default tag for indicating that an item should be marked as notable in the central repository
+
+You can also create custom tag names. These tag names will be automatically saved for future use and will be displayed above the default tag names.
 
 If you just want to tag the item with the default "Bookmark" tag, you can also use the keyboard shortcut control+B instead of going through the menus. 
 
@@ -29,12 +39,36 @@ Items may have more than one tag.
 
 Tagged results are shown in the "Results" portion of the tree under "Tags". Tagged items are also highlighted in the Results Viewer.
 
-<br>
 \image html tagging-4.PNG
-<br>
+
+\section managing_tags Managing tags
 
 The list of tags can be edited through the Tags tab on the Options menu. 
-<br>
+
 \image html tagging-5.PNG
-<br>
+
+
+From here, new tags can be added, existing tags can be edited, and user-created tags can be deleted. Note that deleting a tag does not remove it from any tagged items, and that tag will still be usable in any case where it has been used to tag an item.
+
+\image html tagging-6.PNG
+
+
+If using the central repository, changing the notable status will effect tagged items in the current case only in the following way:
+- If "File A" is tagged with "Tag A", which is not notable, and then "Tag A" is switched to notable, "File A" will be marked as notable in the central repository
+- If "File B" is tagged with "Tag B", which is notable, and then "Tag B" is switched to non-notable, if there are no other notable tags on "File B" then its notable status in the central repository will be removed.
+
+\section user_tags Hiding tags from other users
+
+Tags are associated with the account name of the user that tagged them. This information is visible through selecting items under the "Tags" section of the directory tree:
+
+\image html tagging_user_name.png
+
+or through the \ref cv_annotations content viewer:
+
+\image html content_viewer_annotations.png
+
+It is possible to hide all tagged files and results in the "Tags" area of the tree that were tagged by other users. Open the \ref view_options_page menu either through the gear icon above the directory tree or through Tools->Options, and then select the checkbox to hide other users' tags in the tags area of the tree.
+
+\image html tagging_view_options.png
+
 */

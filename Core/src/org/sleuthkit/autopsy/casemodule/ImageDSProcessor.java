@@ -1,7 +1,7 @@
 /*
  * Autopsy Forensic Browser
  *
- * Copyright 2013-2016 Basis Technology Corp.
+ * Copyright 2013-2018 Basis Technology Corp.
  * Contact: carrier <at> sleuthkit <dot> org
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -33,7 +33,7 @@ import org.sleuthkit.autopsy.corecomponentinterfaces.DataSourceProcessorProgress
 import org.sleuthkit.autopsy.corecomponentinterfaces.DataSourceProcessorCallback;
 import org.sleuthkit.autopsy.corecomponentinterfaces.DataSourceProcessor;
 import org.sleuthkit.autopsy.coreutils.DataSourceUtils;
-import org.sleuthkit.autopsy.corecomponentinterfaces.AutoIngestDataSourceProcessor;
+import org.sleuthkit.autopsy.datasourceprocessors.AutoIngestDataSourceProcessor;
 
 /**
  * A image file data source processor that implements the DataSourceProcessor
@@ -41,9 +41,10 @@ import org.sleuthkit.autopsy.corecomponentinterfaces.AutoIngestDataSourceProcess
  * wizard. It also provides a run method overload to allow it to be used
  * independently of the wizard.
  */
-@ServiceProviders(value={
-    @ServiceProvider(service=DataSourceProcessor.class),
-    @ServiceProvider(service=AutoIngestDataSourceProcessor.class)}
+@ServiceProviders(value = {
+    @ServiceProvider(service = DataSourceProcessor.class)
+    ,
+    @ServiceProvider(service = AutoIngestDataSourceProcessor.class)}
 )
 public class ImageDSProcessor implements DataSourceProcessor, AutoIngestDataSourceProcessor {
 
@@ -63,18 +64,24 @@ public class ImageDSProcessor implements DataSourceProcessor, AutoIngestDataSour
      */
     private String deviceId;
     private String imagePath;
+    private int sectorSize;
     private String timeZone;
     private boolean ignoreFatOrphanFiles;
+    private String md5;
+    private String sha1;
+    private String sha256;
     private boolean setDataSourceOptionsCalled;
 
     static {
         filtersList.add(allFilter);
         filtersList.add(rawFilter);
         filtersList.add(encaseFilter);
-        filtersList.add(virtualMachineFilter);
         allExt.addAll(GeneralFilter.RAW_IMAGE_EXTS);
         allExt.addAll(GeneralFilter.ENCASE_IMAGE_EXTS);
-        allExt.addAll(GeneralFilter.VIRTUAL_MACHINE_EXTS);
+        if (!System.getProperty("os.name").toLowerCase().contains("mac")) {
+            filtersList.add(virtualMachineFilter);
+            allExt.addAll(GeneralFilter.VIRTUAL_MACHINE_EXTS);
+        }
     }
 
     /**
@@ -85,6 +92,15 @@ public class ImageDSProcessor implements DataSourceProcessor, AutoIngestDataSour
      */
     public ImageDSProcessor() {
         configPanel = ImageFilePanel.createInstance(ImageDSProcessor.class.getName(), filtersList);
+    }
+
+    /**
+     * Get the list of file filters supported by this DSP.
+     *
+     * @return A list of all supported file filters.
+     */
+    static List<FileFilter> getFileFiltersList() {
+        return filtersList;
     }
 
     /**
@@ -120,6 +136,7 @@ public class ImageDSProcessor implements DataSourceProcessor, AutoIngestDataSour
      */
     @Override
     public JPanel getPanel() {
+        configPanel.reset();
         configPanel.readSettings();
         configPanel.select();
         return configPanel;
@@ -157,10 +174,23 @@ public class ImageDSProcessor implements DataSourceProcessor, AutoIngestDataSour
             configPanel.storeSettings();
             deviceId = UUID.randomUUID().toString();
             imagePath = configPanel.getContentPaths();
+            sectorSize = configPanel.getSectorSize();
             timeZone = configPanel.getTimeZone();
             ignoreFatOrphanFiles = configPanel.getNoFatOrphans();
+            md5 = configPanel.getMd5();
+            if (md5.isEmpty()) {
+                md5 = null;
+            }
+            sha1 = configPanel.getSha1();
+            if (sha1.isEmpty()) {
+                sha1 = null;
+            }
+            sha256 = configPanel.getSha256();
+            if (sha256.isEmpty()) {
+                sha256 = null;
+            }
         }
-        run(deviceId, imagePath, timeZone, ignoreFatOrphanFiles, progressMonitor, callback);
+        run(deviceId, imagePath, sectorSize, timeZone, ignoreFatOrphanFiles, md5, sha1, sha256, progressMonitor, callback);
     }
 
     /**
@@ -185,7 +215,36 @@ public class ImageDSProcessor implements DataSourceProcessor, AutoIngestDataSour
      * @param callback             Callback to call when processing is done.
      */
     public void run(String deviceId, String imagePath, String timeZone, boolean ignoreFatOrphanFiles, DataSourceProcessorProgressMonitor progressMonitor, DataSourceProcessorCallback callback) {
-        addImageTask = new AddImageTask(deviceId, imagePath, timeZone, ignoreFatOrphanFiles, progressMonitor, callback);
+        run(deviceId, imagePath, 0, timeZone, ignoreFatOrphanFiles, null, null, null, progressMonitor, callback);
+    }
+
+    /**
+     * Adds a data source to the case database using a background task in a
+     * separate thread and the given settings instead of those provided by the
+     * selection and configuration panel. Returns as soon as the background task
+     * is started and uses the callback object to signal task completion and
+     * return results.
+     *
+     * @param deviceId             An ASCII-printable identifier for the device
+     *                             associated with the data source that is
+     *                             intended to be unique across multiple cases
+     *                             (e.g., a UUID).
+     * @param imagePath            Path to the image file.
+     * @param sectorSize           The sector size (use '0' for autodetect).
+     * @param timeZone             The time zone to use when processing dates
+     *                             and times for the image, obtained from
+     *                             java.util.TimeZone.getID.
+     * @param ignoreFatOrphanFiles Whether to parse orphans if the image has a
+     *                             FAT filesystem.
+     * @param md5                  The MD5 hash of the image, may be null.
+     * @param sha1                 The SHA-1 hash of the image, may be null.
+     * @param sha256               The SHA-256 hash of the image, may be null.
+     * @param progressMonitor      Progress monitor for reporting progress
+     *                             during processing.
+     * @param callback             Callback to call when processing is done.
+     */
+    private void run(String deviceId, String imagePath, int sectorSize, String timeZone, boolean ignoreFatOrphanFiles, String md5, String sha1, String sha256, DataSourceProcessorProgressMonitor progressMonitor, DataSourceProcessorCallback callback) {
+        addImageTask = new AddImageTask(deviceId, imagePath, sectorSize, timeZone, ignoreFatOrphanFiles, md5, sha1, sha256, null, progressMonitor, callback);
         new Thread(addImageTask).start();
     }
 
@@ -228,15 +287,15 @@ public class ImageDSProcessor implements DataSourceProcessor, AutoIngestDataSour
 
     @Override
     public int canProcess(Path dataSourcePath) throws AutoIngestDataSourceProcessorException {
-        
+
         // check file extension for supported types
         if (!isAcceptedByFiler(dataSourcePath.toFile(), filtersList)) {
             return 0;
         }
-        
+
         try {
             // verify that the image has a file system that TSK can process
-            Case currentCase = Case.getCurrentCase();
+            Case currentCase = Case.getCurrentCaseThrows();
             if (!DataSourceUtils.imageHasFileSystem(dataSourcePath)) {
                 // image does not have a file system that TSK can process
                 return 0;
@@ -244,21 +303,22 @@ public class ImageDSProcessor implements DataSourceProcessor, AutoIngestDataSour
         } catch (Exception ex) {
             throw new AutoIngestDataSourceProcessorException("Exception inside canProcess() method", ex);
         }
-        
+
         // able to process the data source
         return 100;
     }
 
     @Override
-    public void process(String deviceId, Path dataSourcePath, DataSourceProcessorProgressMonitor progressMonitor, DataSourceProcessorCallback callBack) throws AutoIngestDataSourceProcessorException {
+    public void process(String deviceId, Path dataSourcePath, DataSourceProcessorProgressMonitor progressMonitor, DataSourceProcessorCallback callBack) {
         this.deviceId = deviceId;
         this.imagePath = dataSourcePath.toString();
+        this.sectorSize = 0;
         this.timeZone = Calendar.getInstance().getTimeZone().getID();
         this.ignoreFatOrphanFiles = false;
         setDataSourceOptionsCalled = true;
-        run(deviceId, dataSourcePath.toString(), timeZone, ignoreFatOrphanFiles, progressMonitor, callBack);
+        run(deviceId, dataSourcePath.toString(), sectorSize, timeZone, ignoreFatOrphanFiles, null, null, null, progressMonitor, callBack);
     }
-    
+
     /**
      * Sets the configuration of the data source processor without using the
      * selection and configuration panel.
@@ -276,9 +336,10 @@ public class ImageDSProcessor implements DataSourceProcessor, AutoIngestDataSour
     public void setDataSourceOptions(String imagePath, String timeZone, boolean ignoreFatOrphanFiles) {
         this.deviceId = UUID.randomUUID().toString();
         this.imagePath = imagePath;
+        this.sectorSize = 0;
         this.timeZone = Calendar.getInstance().getTimeZone().getID();
         this.ignoreFatOrphanFiles = ignoreFatOrphanFiles;
         setDataSourceOptionsCalled = true;
     }
-    
+
 }

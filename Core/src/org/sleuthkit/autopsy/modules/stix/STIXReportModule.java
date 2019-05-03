@@ -1,7 +1,7 @@
 /*
  * Autopsy Forensic Browser
  * 
- * Copyright 2013 Basis Technology Corp.
+ * Copyright 2013 - 2018 Basis Technology Corp.
  * Contact: carrier <at> sleuthkit <dot> org
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -29,7 +29,7 @@ import java.util.Map;
 import java.util.logging.Level;
 import javax.swing.JPanel;
 import javax.xml.bind.JAXBContext;
-import javax.xml.bind.JAXBException;
+import javax.xml.bind.JAXBException; 
 import javax.xml.bind.Unmarshaller;
 import javax.xml.namespace.QName;
 import org.mitre.cybox.cybox_2.ObjectType;
@@ -52,6 +52,7 @@ import org.mitre.stix.stix_1.STIXPackage;
 import org.openide.util.NbBundle;
 import org.openide.util.NbBundle.Messages;
 import org.sleuthkit.autopsy.casemodule.Case;
+import org.sleuthkit.autopsy.casemodule.NoCurrentCaseException;
 import org.sleuthkit.autopsy.coreutils.Logger;
 import org.sleuthkit.autopsy.coreutils.MessageNotifyUtil;
 import org.sleuthkit.autopsy.coreutils.ModuleSettings;
@@ -100,7 +101,7 @@ public class STIXReportModule implements GeneralReportModule {
         // Start the progress bar and setup the report
         progressPanel.setIndeterminate(false);
         progressPanel.start();
-        progressPanel.updateStatusLabel(NbBundle.getMessage(this.getClass(), "STIXReportModule.progress.readSTIX"));
+        progressPanel.updateStatusLabel(NbBundle.getMessage(this.getClass(), "STIXReportModule.progress.readSTIX"));        
         reportPath = baseReportDir + getRelativeFilePath();
         File reportFile = new File(reportPath);
         // Check if the user wants to display all output or just hits
@@ -185,7 +186,7 @@ public class STIXReportModule implements GeneralReportModule {
 
             // Set the progress bar to done. If any errors occurred along the way, modify
             // the "complete" message to indicate this.
-            Case.getCurrentCase().addReport(reportPath, Bundle.STIXReportModule_srcModuleName_text(), "");
+            Case.getCurrentCaseThrows().addReport(reportPath, Bundle.STIXReportModule_srcModuleName_text(), "");
             if (hadErrors) {
                 progressPanel.complete(ReportStatus.ERROR);
                 progressPanel.updateStatusLabel(
@@ -202,7 +203,7 @@ public class STIXReportModule implements GeneralReportModule {
             progressPanel.complete(ReportStatus.ERROR);
             progressPanel.updateStatusLabel(
                     NbBundle.getMessage(this.getClass(), "STIXReportModule.progress.completedWithErrors"));
-        } catch (TskCoreException ex) {
+        } catch (TskCoreException | NoCurrentCaseException ex) {
             logger.log(Level.SEVERE, "Unable to add report to database.", ex);
         }
     }

@@ -1,7 +1,7 @@
 /*
  * Autopsy Forensic Browser
  *
- * Copyright 2014 Basis Technology Corp.
+ * Copyright 2014-2018 Basis Technology Corp.
  * Contact: carrier <at> sleuthkit <dot> org
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -29,10 +29,8 @@ import org.openide.NotifyDescriptor;
 import org.openide.util.Lookup;
 import org.openide.util.NbBundle;
 import org.sleuthkit.autopsy.coreutils.Logger;
-import org.sleuthkit.autopsy.examples.SampleExecutableIngestModuleFactory;
 import org.sleuthkit.autopsy.examples.SampleIngestModuleFactory;
-import org.sleuthkit.autopsy.modules.android.AndroidModuleFactory;
-import org.sleuthkit.autopsy.modules.e01verify.E01VerifierModuleFactory;
+import org.sleuthkit.autopsy.modules.dataSourceIntegrity.DataSourceIntegrityModuleFactory;
 import org.sleuthkit.autopsy.modules.exif.ExifParserModuleFactory;
 import org.sleuthkit.autopsy.modules.fileextmismatch.FileExtMismatchDetectorModuleFactory;
 import org.sleuthkit.autopsy.modules.filetypeid.FileTypeIdModuleFactory;
@@ -40,6 +38,9 @@ import org.sleuthkit.autopsy.modules.hashdatabase.HashLookupModuleFactory;
 import org.sleuthkit.autopsy.modules.interestingitems.InterestingItemsIngestModuleFactory;
 import org.sleuthkit.autopsy.modules.photoreccarver.PhotoRecCarverIngestModuleFactory;
 import org.sleuthkit.autopsy.modules.embeddedfileextractor.EmbeddedFileExtractorModuleFactory;
+import org.sleuthkit.autopsy.modules.encryptiondetection.EncryptionDetectionModuleFactory;
+import org.sleuthkit.autopsy.centralrepository.ingestmodule.CentralRepoIngestModuleFactory;
+import org.sleuthkit.autopsy.modules.vmextractor.VMExtractorIngestModuleFactory;
 import org.sleuthkit.autopsy.python.JythonModuleLoader;
 
 /**
@@ -49,7 +50,6 @@ final class IngestModuleFactoryLoader {
 
     private static final Logger logger = Logger.getLogger(IngestModuleFactoryLoader.class.getName());
     private static final String SAMPLE_MODULE_FACTORY_CLASS_NAME = SampleIngestModuleFactory.class.getCanonicalName();
-    private static final String SAMPLE_EXECUTABLE_MODULE_FACTORY_CLASS_NAME = SampleExecutableIngestModuleFactory.class.getCanonicalName();
     private static final ArrayList<String> coreModuleOrdering = new ArrayList<String>() {
         {
             // The ordering of the core ingest module factories implemented
@@ -57,15 +57,17 @@ final class IngestModuleFactoryLoader {
             add("org.sleuthkit.autopsy.recentactivity.RecentActivityExtracterModuleFactory"); //NON-NLS
             add(HashLookupModuleFactory.class.getCanonicalName());
             add(FileTypeIdModuleFactory.class.getCanonicalName());
+            add(FileExtMismatchDetectorModuleFactory.class.getCanonicalName());
             add(EmbeddedFileExtractorModuleFactory.class.getCanonicalName());
             add(ExifParserModuleFactory.class.getCanonicalName());
             add("org.sleuthkit.autopsy.keywordsearch.KeywordSearchModuleFactory"); //NON-NLS
             add("org.sleuthkit.autopsy.thunderbirdparser.EmailParserModuleFactory"); //NON-NLS
-            add(FileExtMismatchDetectorModuleFactory.class.getCanonicalName());
-            add(E01VerifierModuleFactory.class.getCanonicalName());
-            add(AndroidModuleFactory.class.getCanonicalName());
+            add(EncryptionDetectionModuleFactory.class.getCanonicalName());
             add(InterestingItemsIngestModuleFactory.class.getCanonicalName());
+            add(CentralRepoIngestModuleFactory.class.getCanonicalName());
             add(PhotoRecCarverIngestModuleFactory.class.getCanonicalName());
+            add(VMExtractorIngestModuleFactory.class.getCanonicalName());
+            add(DataSourceIntegrityModuleFactory.class.getCanonicalName());
         }
     };
 
@@ -77,7 +79,7 @@ final class IngestModuleFactoryLoader {
      * removed between invocations.
      *
      * @return A list of objects that implement the IngestModuleFactory
-     *         interface.
+     *    interface.
      */
     static List<IngestModuleFactory> getIngestModuleFactories() {
         // A hash set of display names and a hash map of class names to 
@@ -143,8 +145,7 @@ final class IngestModuleFactoryLoader {
     private static void addFactory(IngestModuleFactory factory, HashSet<String> moduleDisplayNames, HashMap<String, IngestModuleFactory> javaFactoriesByClass) {
         // Ignore the sample ingest module factories implemented in Java.        
         String className = factory.getClass().getCanonicalName();
-        if (className.equals(IngestModuleFactoryLoader.SAMPLE_MODULE_FACTORY_CLASS_NAME)
-                || className.equals(IngestModuleFactoryLoader.SAMPLE_EXECUTABLE_MODULE_FACTORY_CLASS_NAME)) {
+        if (className.equals(IngestModuleFactoryLoader.SAMPLE_MODULE_FACTORY_CLASS_NAME)) {
             return;
         }
 

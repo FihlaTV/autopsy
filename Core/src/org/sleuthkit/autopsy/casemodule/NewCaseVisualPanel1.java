@@ -1,7 +1,7 @@
 /*
  * Autopsy Forensic Browser
  *
- * Copyright 2011-2015 Basis Technology Corp.
+ * Copyright 2011-2018 Basis Technology Corp.
  * Contact: carrier <at> sleuthkit <dot> org
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,9 +18,9 @@
  */
 package org.sleuthkit.autopsy.casemodule;
 
+import java.awt.Component;
 import org.openide.util.NbBundle;
 
-import java.awt.*;
 import java.io.File;
 import javax.swing.JFileChooser;
 import javax.swing.JPanel;
@@ -29,10 +29,12 @@ import javax.swing.event.DocumentListener;
 import org.sleuthkit.autopsy.casemodule.Case.CaseType;
 import org.sleuthkit.autopsy.core.UserPreferences;
 import org.sleuthkit.autopsy.coreutils.PathValidator;
+import org.sleuthkit.autopsy.coreutils.PlatformUtil;
 
 /**
  * The JPanel for the first page of the new case wizard.
  */
+@SuppressWarnings("PMD.SingularField") // UI widgets cause lots of false positives
 final class NewCaseVisualPanel1 extends JPanel implements DocumentListener {
 
     private final JFileChooser fileChooser = new JFileChooser();
@@ -150,9 +152,22 @@ final class NewCaseVisualPanel1 extends JPanel implements DocumentListener {
          */
         caseParentDirWarningLabel.setVisible(false);
         String parentDir = getCaseParentDir();
-        if (!PathValidator.isValid(parentDir, getCaseType())) {
+        if (!PathValidator.isValidForMultiUserCase(parentDir, getCaseType())) {
             caseParentDirWarningLabel.setVisible(true);
             caseParentDirWarningLabel.setText(NbBundle.getMessage(this.getClass(), "NewCaseVisualPanel1.CaseFolderOnCDriveError.text"));
+        }
+        
+        /**
+         * Check the base case directory if it can persist data and show a 
+         * warning if it is a wrong choice
+         */
+        if(!PathValidator.isValidForRunningOnTarget(parentDir)){
+            caseParentDirWarningLabel.setVisible(true);
+            if(PlatformUtil.isWindowsOS()){
+                caseParentDirWarningLabel.setText(NbBundle.getMessage(this.getClass(), "NewCaseVisualPanel1.CaseFolderOnInternalDriveWindowsError.text" ));
+            } else if(System.getProperty("os.name").toLowerCase().contains("nux")) {
+                caseParentDirWarningLabel.setText(NbBundle.getMessage(this.getClass(), "NewCaseVisualPanel1.CaseFolderOnInternalDriveLinuxError.text"));
+            }
         }
 
         /**
@@ -202,7 +217,6 @@ final class NewCaseVisualPanel1 extends JPanel implements DocumentListener {
     private void initComponents() {
 
         caseTypeButtonGroup = new javax.swing.ButtonGroup();
-        jLabel1 = new javax.swing.JLabel();
         caseNameLabel = new javax.swing.JLabel();
         caseDirLabel = new javax.swing.JLabel();
         caseNameTextField = new javax.swing.JTextField();
@@ -214,9 +228,6 @@ final class NewCaseVisualPanel1 extends JPanel implements DocumentListener {
         multiUserCaseRadioButton = new javax.swing.JRadioButton();
         caseParentDirWarningLabel = new javax.swing.JLabel();
         caseTypeLabel = new javax.swing.JLabel();
-
-        jLabel1.setFont(jLabel1.getFont().deriveFont(jLabel1.getFont().getStyle() | java.awt.Font.BOLD, 14));
-        org.openide.awt.Mnemonics.setLocalizedText(jLabel1, org.openide.util.NbBundle.getMessage(NewCaseVisualPanel1.class, "NewCaseVisualPanel1.jLabel1.text_1")); // NOI18N
 
         caseNameLabel.setFont(caseNameLabel.getFont().deriveFont(caseNameLabel.getFont().getStyle() & ~java.awt.Font.BOLD, 11));
         org.openide.awt.Mnemonics.setLocalizedText(caseNameLabel, org.openide.util.NbBundle.getMessage(NewCaseVisualPanel1.class, "NewCaseVisualPanel1.caseNameLabel.text_1")); // NOI18N
@@ -283,12 +294,9 @@ final class NewCaseVisualPanel1 extends JPanel implements DocumentListener {
                             .addGroup(layout.createSequentialGroup()
                                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.TRAILING)
                                     .addComponent(caseDirTextField, javax.swing.GroupLayout.Alignment.LEADING)
-                                    .addGroup(javax.swing.GroupLayout.Alignment.LEADING, layout.createSequentialGroup()
-                                        .addComponent(jLabel1)
-                                        .addGap(0, 227, Short.MAX_VALUE))
                                     .addGroup(layout.createSequentialGroup()
                                         .addComponent(caseNameLabel)
-                                        .addGap(26, 26, 26)
+                                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
                                         .addComponent(caseNameTextField))
                                     .addGroup(javax.swing.GroupLayout.Alignment.LEADING, layout.createSequentialGroup()
                                         .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
@@ -300,7 +308,7 @@ final class NewCaseVisualPanel1 extends JPanel implements DocumentListener {
                                                 .addComponent(singleUserCaseRadioButton)
                                                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
                                                 .addComponent(multiUserCaseRadioButton)
-                                                .addGap(0, 0, Short.MAX_VALUE))
+                                                .addGap(0, 192, Short.MAX_VALUE))
                                             .addComponent(caseParentDirTextField))))
                                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
                                 .addComponent(caseDirBrowseButton)))
@@ -309,12 +317,13 @@ final class NewCaseVisualPanel1 extends JPanel implements DocumentListener {
                         .addComponent(caseParentDirWarningLabel)
                         .addGap(0, 0, Short.MAX_VALUE))))
         );
+
+        layout.linkSize(javax.swing.SwingConstants.HORIZONTAL, new java.awt.Component[] {caseDirLabel, caseNameLabel, caseTypeLabel});
+
         layout.setVerticalGroup(
             layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(layout.createSequentialGroup()
-                .addGap(31, 31, 31)
-                .addComponent(jLabel1)
-                .addGap(18, 18, 18)
+                .addContainerGap()
                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
                     .addComponent(caseNameLabel)
                     .addComponent(caseNameTextField, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
@@ -334,7 +343,7 @@ final class NewCaseVisualPanel1 extends JPanel implements DocumentListener {
                 .addComponent(caseDirTextField, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
                 .addGap(27, 27, 27)
                 .addComponent(caseParentDirWarningLabel)
-                .addContainerGap(21, Short.MAX_VALUE))
+                .addContainerGap(115, Short.MAX_VALUE))
         );
     }// </editor-fold>//GEN-END:initComponents
 
@@ -377,7 +386,6 @@ final class NewCaseVisualPanel1 extends JPanel implements DocumentListener {
     private javax.swing.JLabel caseParentDirWarningLabel;
     private javax.swing.ButtonGroup caseTypeButtonGroup;
     private javax.swing.JLabel caseTypeLabel;
-    private javax.swing.JLabel jLabel1;
     private javax.swing.JLabel jLabel2;
     private javax.swing.JRadioButton multiUserCaseRadioButton;
     private javax.swing.JRadioButton singleUserCaseRadioButton;

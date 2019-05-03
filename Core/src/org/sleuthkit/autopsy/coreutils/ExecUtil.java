@@ -1,15 +1,15 @@
 /*
  * Autopsy Forensic Browser
- * 
- * Copyright 2011-2016 Basis Technology Corp.
+ *
+ * Copyright 2013-2019 Basis Technology Corp.
  * Contact: carrier <at> sleuthkit <dot> org
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- * 
+ *
  *     http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -59,7 +59,19 @@ public final class ExecUtil {
     }
 
     /**
-     * Process terminator that can be used to kill a processes after it exceeds
+     * A process terminator that can be used to kill a process spawned by a
+     * thread that has been interrupted.
+     */
+    public static class InterruptedThreadProcessTerminator implements ProcessTerminator {
+
+        @Override
+        public boolean shouldTerminateProcess() {
+            return Thread.currentThread().isInterrupted();
+        }
+    }
+
+    /**
+     * A process terminator that can be used to kill a process after it exceeds
      * a maximum allowable run time.
      */
     public static class TimedProcessTerminator implements ProcessTerminator {
@@ -163,11 +175,21 @@ public final class ExecUtil {
                 process.waitFor(timeOut, units);
                 if (process.isAlive() && terminator.shouldTerminateProcess()) {
                     killProcess(process);
+                    try {
+                        process.waitFor(); //waiting to help ensure process is shutdown before calling interrupt() or returning 
+                    } catch (InterruptedException exx) {
+                        Logger.getLogger(ExecUtil.class.getName()).log(Level.INFO, String.format("Wait for process termination following killProcess was interrupted for command %s", processBuilder.command().get(0)));
+                    }
                 }
             } while (process.isAlive());
         } catch (InterruptedException ex) {
             if (process.isAlive()) {
                 killProcess(process);
+            }
+            try {
+                process.waitFor(); //waiting to help ensure process is shutdown before calling interrupt() or returning 
+            } catch (InterruptedException exx) {
+                Logger.getLogger(ExecUtil.class.getName()).log(Level.INFO, String.format("Wait for process termination following killProcess was interrupted for command %s", processBuilder.command().get(0)));
             }
             Logger.getLogger(ExecUtil.class.getName()).log(Level.INFO, "Thread interrupted while running {0}", processBuilder.command().get(0)); // NON-NLS
             Thread.currentThread().interrupt();
@@ -202,9 +224,6 @@ public final class ExecUtil {
         }
     }
 
-    /**
-     * EVERYTHING FOLLOWING THIS LINE IS DEPRECATED AND SLATED FOR REMOVAL
-     */
     private static final Logger logger = Logger.getLogger(ExecUtil.class.getName());
     private Process proc = null;
     private ExecUtil.StreamToStringRedirect errorStringRedirect = null;

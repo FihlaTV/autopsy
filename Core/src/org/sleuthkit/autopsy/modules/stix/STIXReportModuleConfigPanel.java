@@ -1,7 +1,7 @@
 /*
  * Autopsy Forensic Browser
  * 
- * Copyright 2013 Basis Technology Corp.
+ * Copyright 2013-2018 Basis Technology Corp.
  * Contact: carrier <at> sleuthkit <dot> org
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,8 +23,9 @@ import javax.swing.JFileChooser;
 import org.sleuthkit.autopsy.coreutils.ModuleSettings;
 
 /**
- *
+ * Configuration panel for STIX report generation.
  */
+@SuppressWarnings("PMD.SingularField") // UI widgets cause lots of false positives
 public class STIXReportModuleConfigPanel extends javax.swing.JPanel {
 
     String stixFile = null;
@@ -156,7 +157,7 @@ public class STIXReportModuleConfigPanel extends javax.swing.JPanel {
             fileChooser.setCurrentDirectory(currentSelection);
         }
 
-        int result = fileChooser.showOpenDialog(null);
+        int result = fileChooser.showOpenDialog(this);
 
         if (result == JFileChooser.APPROVE_OPTION) {
             stixFile = fileChooser.getSelectedFile().getAbsolutePath();

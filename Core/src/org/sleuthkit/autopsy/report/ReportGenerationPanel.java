@@ -1,7 +1,7 @@
 /*
  * Autopsy Forensic Browser
  *
- * Copyright 2011-2016 Basis Technology Corp.
+ * Copyright 2011-2018 Basis Technology Corp.
  * Contact: carrier <at> sleuthkit <dot> org
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -32,6 +32,7 @@ import org.sleuthkit.autopsy.report.ReportProgressPanel.ReportStatus;
  * A panel that displays a panel used by a report generation module to show
  * progress. It provides OK and Cancel buttons.
  */
+@SuppressWarnings("PMD.SingularField") // UI widgets cause lots of false positives
 class ReportGenerationPanel extends javax.swing.JPanel {
 
     private static final long serialVersionUID = 1L;
@@ -112,7 +113,7 @@ class ReportGenerationPanel extends javax.swing.JPanel {
         if (closeable) {
             actionListener.actionPerformed(null);
         } else {
-            int result = JOptionPane.showConfirmDialog(null,
+            int result = JOptionPane.showConfirmDialog(this,
                     NbBundle.getMessage(this.getClass(),
                             "ReportGenerationPanel.confDlg.sureToClose.msg"),
                     NbBundle.getMessage(this.getClass(),
@@ -215,7 +216,7 @@ class ReportGenerationPanel extends javax.swing.JPanel {
 
     private void cancelButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_cancelButtonActionPerformed
         if (progressPanel.getStatus() == ReportStatus.QUEUING || progressPanel.getStatus() == ReportStatus.RUNNING) {
-            int result = JOptionPane.showConfirmDialog(null, NbBundle.getMessage(this.getClass(),
+            int result = JOptionPane.showConfirmDialog(this, NbBundle.getMessage(this.getClass(),
                     "ReportGenerationPanel.confDlg.cancelReport.msg"),
                     NbBundle.getMessage(this.getClass(),
                             "ReportGenerationPanel.cancelButton.text"),

@@ -1,7 +1,7 @@
 /*
  * Autopsy Forensic Browser
  *
- * Copyright 2011-2016 Basis Technology Corp.
+ * Copyright 2011-2018 Basis Technology Corp.
  * Contact: carrier <at> sleuthkit <dot> org
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,19 +25,30 @@ import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 import org.openide.util.NbBundle;
 import org.openide.util.Utilities;
+import org.openide.windows.WindowManager;
 import org.sleuthkit.autopsy.casemodule.Case;
+import org.sleuthkit.autopsy.casemodule.NoCurrentCaseException;
 import org.sleuthkit.autopsy.coreutils.Logger;
 import org.sleuthkit.datamodel.AbstractFile;
 import org.sleuthkit.datamodel.Content;
-import org.sleuthkit.datamodel.FsContent;
-import org.sleuthkit.datamodel.LayoutFile;
-import org.sleuthkit.datamodel.LocalFile;
 import org.sleuthkit.datamodel.TagName;
 import org.sleuthkit.datamodel.TskCoreException;
 
 /**
  * Instances of this Action allow users to apply tags to content.
  */
+@NbBundle.Messages({
+    "AddContentTagAction.singularTagFile=Add File Tag",
+    "AddContentTagAction.pluralTagFile=Add File Tags",
+    "# {0} - fileName",
+    "AddContentTagAction.unableToTag.msg=Unable to tag {0}, not a regular file.",
+    "AddContentTagAction.cannotApplyTagErr=Cannot Apply Tag",
+    "# {0} - fileName",
+    "AddContentTagAction.unableToTag.msg2=Unable to tag {0}.",
+    "AddContentTagAction.taggingErr=Tagging Error",
+    "# {0} - fileName", "# {1} - tagName",
+    "AddContentTagAction.tagExists={0} has been tagged as {1}. Cannot reapply the same tag."
+})
 public class AddContentTagAction extends AddTagAction {
 
     // This class is a singleton to support multi-selection of nodes, since 
@@ -85,7 +96,7 @@ public class AddContentTagAction extends AddTagAction {
                             file = (AbstractFile) parentFile;
                         } else {
                             SwingUtilities.invokeLater(() -> {
-                                JOptionPane.showMessageDialog(null,
+                                JOptionPane.showMessageDialog(WindowManager.getDefault().getMainWindow(),
                                         NbBundle.getMessage(this.getClass(),
                                                 "AddContentTagAction.unableToTag.msg",
                                                 parentFile.getName()),
@@ -104,7 +115,7 @@ public class AddContentTagAction extends AddTagAction {
                             } else {
                                 final Content parentFileCopy = parentFile;
                                 SwingUtilities.invokeLater(() -> {
-                                    JOptionPane.showMessageDialog(null,
+                                    JOptionPane.showMessageDialog(WindowManager.getDefault().getMainWindow(),
                                             NbBundle.getMessage(this.getClass(),
                                                     "AddContentTagAction.unableToTag.msg",
                                                     parentFileCopy.getName()),
@@ -117,7 +128,7 @@ public class AddContentTagAction extends AddTagAction {
                         } else {
                             final Content parentFileCopy = parentFile;
                             SwingUtilities.invokeLater(() -> {
-                                JOptionPane.showMessageDialog(null,
+                                JOptionPane.showMessageDialog(WindowManager.getDefault().getMainWindow(),
                                         NbBundle.getMessage(this.getClass(),
                                                 "AddContentTagAction.unableToTag.msg",
                                                 parentFileCopy.getName()),
@@ -129,12 +140,12 @@ public class AddContentTagAction extends AddTagAction {
                         }
                     }
 
-                    Case.getCurrentCase().getServices().getTagsManager().addContentTag(file, tagName, comment);
-                } catch (TskCoreException ex) {
+                    Case.getCurrentCaseThrows().getServices().getTagsManager().addContentTag(file, tagName, comment);
+                } catch (TskCoreException | NoCurrentCaseException ex) {
                     Logger.getLogger(AddContentTagAction.class.getName()).log(Level.SEVERE, "Error tagging result", ex); //NON-NLS
                     AbstractFile fileCopy = file;
                     SwingUtilities.invokeLater(() -> {
-                        JOptionPane.showMessageDialog(null,
+                        JOptionPane.showMessageDialog(WindowManager.getDefault().getMainWindow(),
                                 NbBundle.getMessage(this.getClass(),
                                         "AddContentTagAction.unableToTag.msg2",
                                         fileCopy.getName()),

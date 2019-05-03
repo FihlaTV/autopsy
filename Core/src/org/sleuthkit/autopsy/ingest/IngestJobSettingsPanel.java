@@ -1,7 +1,7 @@
 /*
  * Autopsy Forensic Browser
  *
- * Copyright 2011-2016 Basis Technology Corp.
+ * Copyright 2011-2018 Basis Technology Corp.
  * Contact: carrier <at> sleuthkit <dot> org
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,16 +19,14 @@
 package org.sleuthkit.autopsy.ingest;
 
 import java.awt.Component;
-import java.awt.Dimension;
-import java.awt.Toolkit;
 import java.awt.event.ActionEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
-import java.util.logging.Logger;
 import javax.swing.DefaultComboBoxModel;
 import javax.swing.Icon;
 import javax.swing.ImageIcon;
@@ -44,7 +42,9 @@ import javax.swing.table.TableColumn;
 import org.openide.util.NbBundle.Messages;
 import org.sleuthkit.autopsy.casemodule.Case;
 import org.sleuthkit.autopsy.casemodule.IngestJobInfoPanel;
+import org.sleuthkit.autopsy.casemodule.NoCurrentCaseException;
 import org.sleuthkit.autopsy.corecomponents.AdvancedConfigurationDialog;
+import org.sleuthkit.autopsy.coreutils.Logger;
 import org.sleuthkit.autopsy.modules.interestingitems.FilesSet;
 import org.sleuthkit.autopsy.modules.interestingitems.FilesSetDefsPanel;
 import org.sleuthkit.autopsy.modules.interestingitems.FilesSetPanel;
@@ -58,6 +58,7 @@ import org.sleuthkit.autopsy.modules.interestingitems.FilesSetsManager;
 /**
  * A panel to allow a user to make ingest job settings.
  */
+@SuppressWarnings("PMD.SingularField") // UI widgets cause lots of false positives
 public final class IngestJobSettingsPanel extends javax.swing.JPanel {
 
     private static final long serialVersionUID = 1L;
@@ -72,7 +73,8 @@ public final class IngestJobSettingsPanel extends javax.swing.JPanel {
     private static final Logger logger = Logger.getLogger(IngestJobSettingsPanel.class.getName());
 
     /**
-     * Construct a panel to allow a user to make ingest job settings.
+     * Construct a panel to allow a user to make ingest job settings. This
+     * constructor assumes there is no ingest history.
      *
      * @param settings The initial settings for the ingest job.
      */
@@ -83,22 +85,23 @@ public final class IngestJobSettingsPanel extends javax.swing.JPanel {
         }
         initComponents();
         customizeComponents();
-        fileIngestFilterComboBox.setSelectedItem(settings.getFileIngestFilter().getName());
+        fileIngestFilterComboBox.setSelectedItem(settings.getFileFilter().getName());
     }
 
     /**
-     * Construct a panel to allow a user to make ingest job settings.
+     * Construct a panel to allow a user to make ingest job settings. This
+     * constructor enables tracking of ingest job history.
      *
      * @param settings    The initial settings for the ingest job.
      * @param dataSources The data sources ingest is being run on.
      */
-    IngestJobSettingsPanel(IngestJobSettings settings, List<Content> dataSources) {
+    public IngestJobSettingsPanel(IngestJobSettings settings, List<Content> dataSources) {
         this.settings = settings;
         this.dataSources.addAll(dataSources);
         try {
-            SleuthkitCase skCase = Case.getCurrentCase().getSleuthkitCase();
+            SleuthkitCase skCase = Case.getCurrentCaseThrows().getSleuthkitCase();
             ingestJobs.addAll(skCase.getIngestJobs());
-        } catch (IllegalStateException ex) {
+        } catch (NoCurrentCaseException ex) {
             logger.log(Level.SEVERE, "No open case", ex);
         } catch (TskCoreException ex) {
             logger.log(Level.SEVERE, "Failed to load ingest job information", ex);
@@ -108,7 +111,7 @@ public final class IngestJobSettingsPanel extends javax.swing.JPanel {
         }
         initComponents();
         customizeComponents();
-        fileIngestFilterComboBox.setSelectedItem(settings.getFileIngestFilter().getName());
+        fileIngestFilterComboBox.setSelectedItem(settings.getFileFilter().getName());
     }
 
     /**
@@ -183,6 +186,10 @@ public final class IngestJobSettingsPanel extends javax.swing.JPanel {
          * and jobs for which to display the history.
          */
         pastJobsButton.setEnabled(!dataSources.isEmpty() && !ingestJobs.isEmpty());
+    }
+
+    void setPastJobsButtonVisible(boolean isVisible) {
+        pastJobsButton.setVisible(isVisible);
     }
 
     /**
@@ -260,7 +267,7 @@ public final class IngestJobSettingsPanel extends javax.swing.JPanel {
                 .addGap(8, 8, 8)
                 .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
                     .addComponent(descriptionLabel, javax.swing.GroupLayout.PREFERRED_SIZE, 0, Short.MAX_VALUE)
-                    .addComponent(jScrollPane1, javax.swing.GroupLayout.Alignment.TRAILING, javax.swing.GroupLayout.DEFAULT_SIZE, 320, Short.MAX_VALUE)
+                    .addComponent(jScrollPane1, javax.swing.GroupLayout.Alignment.TRAILING, javax.swing.GroupLayout.DEFAULT_SIZE, 266, Short.MAX_VALUE)
                     .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, jPanel1Layout.createSequentialGroup()
                         .addGap(0, 0, Short.MAX_VALUE)
                         .addComponent(globalSettingsButton)))
@@ -270,20 +277,20 @@ public final class IngestJobSettingsPanel extends javax.swing.JPanel {
             jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, jPanel1Layout.createSequentialGroup()
                 .addContainerGap()
-                .addComponent(jScrollPane1, javax.swing.GroupLayout.DEFAULT_SIZE, 330, Short.MAX_VALUE)
+                .addComponent(jScrollPane1, javax.swing.GroupLayout.DEFAULT_SIZE, 328, Short.MAX_VALUE)
                 .addGap(18, 18, 18)
                 .addComponent(jSeparator2, javax.swing.GroupLayout.PREFERRED_SIZE, 2, javax.swing.GroupLayout.PREFERRED_SIZE)
                 .addGap(8, 8, 8)
-                .addComponent(descriptionLabel, javax.swing.GroupLayout.PREFERRED_SIZE, 20, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addComponent(descriptionLabel, javax.swing.GroupLayout.PREFERRED_SIZE, 19, javax.swing.GroupLayout.PREFERRED_SIZE)
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                 .addComponent(globalSettingsButton)
                 .addGap(8, 8, 8))
         );
 
         jButtonSelectAll.setText(org.openide.util.NbBundle.getMessage(IngestJobSettingsPanel.class, "IngestJobSettingsPanel.jButtonSelectAll.text")); // NOI18N
+        jButtonSelectAll.setMargin(new java.awt.Insets(2, 8, 2, 8));
         jButtonSelectAll.setMaximumSize(new java.awt.Dimension(87, 23));
         jButtonSelectAll.setMinimumSize(new java.awt.Dimension(87, 23));
-        jButtonSelectAll.setPreferredSize(new java.awt.Dimension(86, 23));
         jButtonSelectAll.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
                 jButtonSelectAllActionPerformed(evt);
@@ -291,7 +298,7 @@ public final class IngestJobSettingsPanel extends javax.swing.JPanel {
         });
 
         jButtonDeselectAll.setText(org.openide.util.NbBundle.getMessage(IngestJobSettingsPanel.class, "IngestJobSettingsPanel.jButtonDeselectAll.text")); // NOI18N
-        jButtonDeselectAll.setPreferredSize(new java.awt.Dimension(86, 23));
+        jButtonDeselectAll.setMargin(new java.awt.Insets(2, 8, 2, 8));
         jButtonDeselectAll.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
                 jButtonDeselectAllActionPerformed(evt);
@@ -299,9 +306,9 @@ public final class IngestJobSettingsPanel extends javax.swing.JPanel {
         });
 
         pastJobsButton.setText(org.openide.util.NbBundle.getMessage(IngestJobSettingsPanel.class, "IngestJobSettingsPanel.pastJobsButton.text")); // NOI18N
+        pastJobsButton.setMargin(new java.awt.Insets(2, 8, 2, 8));
         pastJobsButton.setMaximumSize(new java.awt.Dimension(87, 23));
         pastJobsButton.setMinimumSize(new java.awt.Dimension(87, 23));
-        pastJobsButton.setPreferredSize(new java.awt.Dimension(87, 23));
         pastJobsButton.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
                 pastJobsButtonActionPerformed(evt);
@@ -331,10 +338,10 @@ public final class IngestJobSettingsPanel extends javax.swing.JPanel {
                         .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                         .addComponent(pastJobsButton, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
                     .addComponent(modulesScrollPane, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                    .addComponent(fileIngestFilterLabel, javax.swing.GroupLayout.PREFERRED_SIZE, 112, javax.swing.GroupLayout.PREFERRED_SIZE)
+                    .addComponent(fileIngestFilterLabel)
                     .addComponent(fileIngestFilterComboBox, 0, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
                 .addGap(4, 4, 4)
-                .addComponent(jPanel1, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                .addComponent(jPanel1, javax.swing.GroupLayout.DEFAULT_SIZE, 284, Short.MAX_VALUE)
                 .addGap(5, 5, 5))
         );
 
@@ -354,9 +361,9 @@ public final class IngestJobSettingsPanel extends javax.swing.JPanel {
                         .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                         .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
                             .addComponent(jButtonSelectAll, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                            .addComponent(jButtonDeselectAll, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                            .addComponent(jButtonDeselectAll)
                             .addComponent(pastJobsButton, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)))
-                    .addComponent(jPanel1, javax.swing.GroupLayout.DEFAULT_SIZE, 428, Short.MAX_VALUE))
+                    .addComponent(jPanel1, javax.swing.GroupLayout.DEFAULT_SIZE, 426, Short.MAX_VALUE))
                 .addContainerGap())
         );
     }// </editor-fold>//GEN-END:initComponents
@@ -394,10 +401,7 @@ public final class IngestJobSettingsPanel extends javax.swing.JPanel {
         JDialog dialog = new JDialog(topFrame, Bundle.IngestJobSettingsPanel_pastJobsButton_action_frame_title(), false);
         IngestJobInfoPanel ingestInfo = new IngestJobInfoPanel();
         dialog.add(ingestInfo);
-        Dimension screenDimension = Toolkit.getDefaultToolkit().getScreenSize();
-        double w = dialog.getSize().getWidth();
-        double h = dialog.getSize().getHeight();
-        dialog.setLocation((int) ((screenDimension.getWidth() - w) / 2), (int) ((screenDimension.getHeight() - h) / 2));
+        dialog.setLocationRelativeTo(topFrame);
         dialog.setResizable(true);
         dialog.pack();
         dialog.setVisible(true);
@@ -409,33 +413,56 @@ public final class IngestJobSettingsPanel extends javax.swing.JPanel {
             FilesSetDefsPanel fileIngestFilterPanel;
             fileIngestFilterPanel = new FilesSetDefsPanel(FilesSetDefsPanel.PANEL_TYPE.FILE_INGEST_FILTERS);
             fileIngestFilterPanel.load();
+            //save the filters that exist before any are created
+            final ArrayList<String> oldFilterList = new ArrayList<>(Arrays.asList(getComboBoxContents()));
             dialog.addApplyButtonListener(
                     (ActionEvent e) -> {
                         fileIngestFilterPanel.store();
+                        ArrayList<FilesSet> newFilterList = new ArrayList<>();
+                        try {
+                            newFilterList.addAll(FilesSetsManager.getInstance().getCustomFileIngestFilters().values());
+                        } catch (FilesSetsManager.FilesSetsManagerException ex) {
+                            logger.log(Level.SEVERE, "Failed to get user created file ingest filters, only default available for selection", ex); //NON-NLS
+                        }
+                        String filterToSelect = settings.getFileFilter().getName();
+                        for (FilesSet filter : newFilterList) {  //getting one of the recently created filters
+                            if (!oldFilterList.contains(filter.getName())) {
+                                //set newly created filter to selected filter
+                                filterToSelect = filter.getName();
+                                break;
+                            }
+                        }
                         fileIngestFilterComboBox.setModel(new DefaultComboBoxModel<>(getComboBoxContents()));
+                        //set the selected filter after the comboBox Contents were updated to include it
+                        fileIngestFilterComboBox.setSelectedItem(filterToSelect);
+                        //refresh the saved filter in use case where the selected modified filter 
+                        //has the same name as a previously existing filter
+                        updateSelectedFilter(filterToSelect);
                         dialog.close();
                     }
             );
             dialog.display(fileIngestFilterPanel);
-
-            fileIngestFilterComboBox.setSelectedItem(settings.getFileIngestFilter().getName());
-
+            //return to saved selection in case they cancel out of filter creation 
+            fileIngestFilterComboBox.setSelectedItem(settings.getFileFilter().getName());
         } else if (evt.getActionCommand().equals("comboBoxChanged")) {
-
-            try {
-                Map<String, FilesSet> fileIngestFilters = FilesSetsManager.getInstance()
-                        .getCustomFileIngestFilters();
-                for (FilesSet fSet : FilesSetsManager.getStandardFileIngestFilters()) {
-                    fileIngestFilters.put(fSet.getName(), fSet);
-                }
-                settings.setFileIngestFilter(fileIngestFilters
-                        .get(fileIngestFilterComboBox.getSelectedItem().toString()));
-            } catch (FilesSetsManager.FilesSetsManagerException ex) {
-                settings.setFileIngestFilter(FilesSetsManager.getDefaultFilter());
-                logger.log(Level.SEVERE, "Failed to get file ingest filter from combobox selection, default filter being used", ex); //NON-NLS
-            }
+            updateSelectedFilter(fileIngestFilterComboBox.getSelectedItem().toString());
         }
     }//GEN-LAST:event_fileIngestFilterComboBoxActionPerformed
+
+    private void updateSelectedFilter(String filterName) {
+        try {
+            Map<String, FilesSet> fileIngestFilters = FilesSetsManager.getInstance()
+                    .getCustomFileIngestFilters();
+            for (FilesSet fSet : FilesSetsManager.getStandardFileIngestFilters()) {
+                fileIngestFilters.put(fSet.getName(), fSet);
+            }
+            settings.setFileFilter(fileIngestFilters
+                    .get(filterName));
+        } catch (FilesSetsManager.FilesSetsManagerException ex) {
+            settings.setFileFilter(FilesSetsManager.getDefaultFilter());
+            logger.log(Level.SEVERE, "Failed to get file ingest filter from combobox selection, default filter being used", ex); //NON-NLS
+        }
+    }
 
     /**
      * Returns an array which will contain the names of all options which should

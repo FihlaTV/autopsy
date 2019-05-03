@@ -19,7 +19,9 @@
 package org.sleuthkit.autopsy.timeline.explorernodes;
 
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.logging.Level;
 import org.openide.nodes.AbstractNode;
 import org.openide.nodes.ChildFactory;
@@ -27,6 +29,7 @@ import org.openide.nodes.Children;
 import org.openide.nodes.Node;
 import org.openide.util.NbBundle;
 import org.openide.util.lookup.Lookups;
+import org.sleuthkit.autopsy.casemodule.NoCurrentCaseException;
 import org.sleuthkit.autopsy.coreutils.Logger;
 import org.sleuthkit.autopsy.datamodel.DisplayableItemNode;
 import org.sleuthkit.autopsy.datamodel.DisplayableItemNodeVisitor;
@@ -57,7 +60,7 @@ public class EventRootNode extends DisplayableItemNode {
     }
 
     @Override
-    public <T> T accept(DisplayableItemNodeVisitor<T> v) {
+    public <T> T accept(DisplayableItemNodeVisitor<T> visitor) {
         return null;
     }
 
@@ -82,6 +85,8 @@ public class EventRootNode extends DisplayableItemNode {
          * filteredEvents is used to lookup the events from their IDs
          */
         private final FilteredEventsModel filteredEvents;
+        private Map<Long, Node > nodesMap = new HashMap<>();
+        
 
         EventNodeChildFactory(Collection<Long> fileIds, FilteredEventsModel filteredEvents) {
             this.eventIDs = fileIds;
@@ -95,8 +100,16 @@ public class EventRootNode extends DisplayableItemNode {
              * indicate this.
              */
             if (eventIDs.size() < MAX_EVENTS_TO_DISPLAY) {
-                toPopulate.addAll(eventIDs);
+                for (Long eventId: eventIDs){
+                    if (!nodesMap.containsKey(eventId)) {
+                        nodesMap.put(eventId, createNode(eventId));
+                    }
+                    toPopulate.add(eventId);
+                }
             } else {
+                if (!nodesMap.containsKey(-1L)) {
+                    nodesMap.put(-1L, createNode(-1L));
+                }
                 toPopulate.add(-1L);
             }
             return true;
@@ -104,6 +117,11 @@ public class EventRootNode extends DisplayableItemNode {
 
         @Override
         protected Node createNodeForKey(Long eventID) {
+            return nodesMap.get(eventID);
+        }
+        
+        private Node createNode(Long eventID) {
+            
             if (eventID < 0) {
                 /*
                  * If the eventId is a the special value ( -1 ), return a node
@@ -113,7 +131,7 @@ public class EventRootNode extends DisplayableItemNode {
             } else {
                 try {
                     return EventNode.createEventNode(eventID, filteredEvents);
-                } catch (IllegalStateException ex) {
+                } catch (NoCurrentCaseException ex) {
                     //Since the case is closed, the user probably doesn't care about this, just log it as a precaution.
                     LOGGER.log(Level.SEVERE, "There was no case open to lookup the Sleuthkit object backing a SingleEvent.", ex); // NON-NLS
                     return null;

@@ -1,7 +1,7 @@
 /*
  * Autopsy Forensic Browser
  *
- * Copyright 2011-2016 Basis Technology Corp.
+ * Copyright 2011-2018 Basis Technology Corp.
  * Contact: carrier <at> sleuthkit <dot> org
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,7 +25,9 @@ import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 import org.openide.util.NbBundle;
 import org.openide.util.Utilities;
+import org.openide.windows.WindowManager;
 import org.sleuthkit.autopsy.casemodule.Case;
+import org.sleuthkit.autopsy.casemodule.NoCurrentCaseException;
 import org.sleuthkit.autopsy.coreutils.Logger;
 import org.sleuthkit.datamodel.BlackboardArtifact;
 import org.sleuthkit.datamodel.TagName;
@@ -34,6 +36,13 @@ import org.sleuthkit.datamodel.TskCoreException;
 /**
  * Instances of this Action allow users to apply tags to blackboard artifacts.
  */
+@NbBundle.Messages({
+    "AddBlackboardArtifactTagAction.singularTagResult=Add Result Tag",
+    "AddBlackboardArtifactTagAction.pluralTagResult=Add Result Tags",
+    "# {0} - artifactName",
+    "AddBlackboardArtifactTagAction.unableToTag.msg=Unable to tag {0}.",
+    "AddBlackboardArtifactTagAction.taggingErr=Tagging Error"
+})
 public class AddBlackboardArtifactTagAction extends AddTagAction {
 
     // This class is a singleton to support multi-selection of nodes, since 
@@ -75,11 +84,11 @@ public class AddBlackboardArtifactTagAction extends AddTagAction {
         new Thread(() -> {
             for (BlackboardArtifact artifact : selectedArtifacts) {
                 try {
-                    Case.getCurrentCase().getServices().getTagsManager().addBlackboardArtifactTag(artifact, tagName, comment);
-                } catch (TskCoreException ex) {
+                    Case.getCurrentCaseThrows().getServices().getTagsManager().addBlackboardArtifactTag(artifact, tagName, comment);
+                } catch (TskCoreException | NoCurrentCaseException ex) {
                     Logger.getLogger(AddBlackboardArtifactTagAction.class.getName()).log(Level.SEVERE, "Error tagging result", ex); //NON-NLS
                     SwingUtilities.invokeLater(() -> {
-                        JOptionPane.showMessageDialog(null,
+                        JOptionPane.showMessageDialog(WindowManager.getDefault().getMainWindow(),
                                 NbBundle.getMessage(this.getClass(),
                                         "AddBlackboardArtifactTagAction.unableToTag.msg",
                                         artifact.getDisplayName()),

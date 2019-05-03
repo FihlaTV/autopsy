@@ -33,6 +33,8 @@ import java.util.List;
 import java.util.logging.Level;
 import org.sleuthkit.autopsy.coreutils.Logger;
 import org.openide.util.NbBundle;
+import org.sleuthkit.autopsy.casemodule.NoCurrentCaseException;
+import org.sleuthkit.autopsy.ingest.IngestModule;
 import org.sleuthkit.autopsy.ingest.IngestMonitor;
 import org.sleuthkit.autopsy.ingest.IngestServices;
 import static org.sleuthkit.autopsy.thunderbirdparser.ThunderbirdMboxFileIngestModule.getRelModuleOutputPath;
@@ -174,11 +176,10 @@ class PstParser {
         email.setBcc(msg.getDisplayBCC());
         email.setSender(getSender(msg.getSenderName(), msg.getSenderEmailAddress()));
         email.setSentDate(msg.getMessageDeliveryTime());
-        if(msg.getTransportMessageHeaders().isEmpty()) {
-            email.setTextBody(msg.getBody());
-        } else {
-            email.setTextBody(msg.getBody() + "\n-----HEADERS-----\n\n" + msg.getTransportMessageHeaders() + "\n\n---END HEADERS--\n\n");
-        }
+        email.setTextBody(msg.getBody());
+        if(false == msg.getTransportMessageHeaders().isEmpty()) {
+            email.setHeaders("\n-----HEADERS-----\n\n" + msg.getTransportMessageHeaders() + "\n\n---END HEADERS--\n\n");
+        } 
         
         email.setHtmlBody(msg.getBodyHTML());
         String rtf = "";
@@ -205,9 +206,16 @@ class PstParser {
      * @param email
      * @param msg
      */
+    @NbBundle.Messages({"PstParser.noOpenCase.errMsg=Exception while getting open case."})
     private void extractAttachments(EmailMessage email, PSTMessage msg, long fileID) {
         int numberOfAttachments = msg.getNumberOfAttachments();
-        String outputDirPath = ThunderbirdMboxFileIngestModule.getModuleOutputPath() + File.separator;
+        String outputDirPath;
+        try {
+            outputDirPath = ThunderbirdMboxFileIngestModule.getModuleOutputPath() + File.separator;
+        } catch (NoCurrentCaseException ex) {
+                logger.log(Level.SEVERE, "Exception while getting open case.", ex); //NON-NLS
+                return;
+        }
         for (int x = 0; x < numberOfAttachments; x++) {
             String filename = "";
             try {
@@ -247,6 +255,9 @@ class PstParser {
                         NbBundle.getMessage(this.getClass(), "PstParser.extractAttch.errMsg.failedToExtractToDisk",
                                 filename));
                 logger.log(Level.WARNING, "Failed to extract attachment from pst file.", ex); //NON-NLS
+            } catch (NoCurrentCaseException ex) {
+                addErrorMessage(Bundle.PstParser_noOpenCase_errMsg());
+                logger.log(Level.SEVERE, Bundle.PstParser_noOpenCase_errMsg(), ex); //NON-NLS
             }
         }
     }

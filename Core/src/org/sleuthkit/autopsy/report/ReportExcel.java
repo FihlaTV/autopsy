@@ -1,7 +1,7 @@
 /*
  * Autopsy Forensic Browser
  *
- * Copyright 2013-2014 Basis Technology Corp.
+ * Copyright 2013-2018 Basis Technology Corp.
  * Contact: carrier <at> sleuthkit <dot> org
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,7 +26,9 @@ import java.util.logging.Level;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.openide.util.NbBundle;
+import org.openide.util.NbBundle.Messages;
 import org.sleuthkit.autopsy.casemodule.Case;
+import org.sleuthkit.autopsy.casemodule.NoCurrentCaseException;
 import org.sleuthkit.autopsy.coreutils.Logger;
 import org.sleuthkit.datamodel.TskCoreException;
 
@@ -34,6 +36,7 @@ class ReportExcel implements TableReportModule {
 
     private static final Logger logger = Logger.getLogger(ReportExcel.class.getName());
     private static ReportExcel instance;
+    private static final int EXCEL_CELL_MAXIMUM_SIZE = 36767; //Specified at:https://poi.apache.org/apidocs/org/apache/poi/ss/SpreadsheetVersion.html
 
     private Workbook wb;
     private Sheet sheet;
@@ -66,7 +69,7 @@ class ReportExcel implements TableReportModule {
     public void startReport(String baseReportDir) {
         // Set the path and save it for when the report is written to disk.
         this.reportPath = baseReportDir + getRelativeFilePath();
-
+ 
         // Make a workbook.
         wb = new XSSFWorkbook();
 
@@ -80,15 +83,15 @@ class ReportExcel implements TableReportModule {
         Font titleFont = wb.createFont();
         titleFont.setFontHeightInPoints((short) 12);
         titleStyle.setFont(titleFont);
-        titleStyle.setAlignment(CellStyle.ALIGN_LEFT);
+        titleStyle.setAlignment(HorizontalAlignment.LEFT);
         titleStyle.setWrapText(true);
 
         setStyle = wb.createCellStyle();
         Font setFont = wb.createFont();
         setFont.setFontHeightInPoints((short) 14);
-        setFont.setBoldweight((short) 10);
+        setFont.setBold(true);
         setStyle.setFont(setFont);
-        setStyle.setAlignment(CellStyle.ALIGN_LEFT);
+        setStyle.setAlignment(HorizontalAlignment.LEFT);
         setStyle.setWrapText(true);
 
         elementStyle = wb.createCellStyle();
@@ -96,7 +99,7 @@ class ReportExcel implements TableReportModule {
         Font elementFont = wb.createFont();
         elementFont.setFontHeightInPoints((short) 14);
         elementStyle.setFont(elementFont);
-        elementStyle.setAlignment(CellStyle.ALIGN_LEFT);
+        elementStyle.setAlignment(HorizontalAlignment.LEFT);
         elementStyle.setWrapText(true);
 
         writeSummaryWorksheet();
@@ -111,13 +114,15 @@ class ReportExcel implements TableReportModule {
         try {
             out = new FileOutputStream(reportPath);
             wb.write(out);
-            Case.getCurrentCase().addReport(reportPath, NbBundle.getMessage(this.getClass(),
+            Case.getCurrentCaseThrows().addReport(reportPath, NbBundle.getMessage(this.getClass(),
                     "ReportExcel.endReport.srcModuleName.text"), "");
         } catch (IOException ex) {
             logger.log(Level.SEVERE, "Failed to write Excel report.", ex); //NON-NLS
         } catch (TskCoreException ex) {
             String errorMessage = String.format("Error adding %s to case as a report", reportPath); //NON-NLS
             logger.log(Level.SEVERE, errorMessage, ex);
+        } catch (NoCurrentCaseException ex) {
+            logger.log(Level.SEVERE, "Exception while getting open case.", ex); //NON-NLS
         } finally {
             if (out != null) {
                 try {
@@ -236,10 +241,24 @@ class ReportExcel implements TableReportModule {
      * @param row cells to add
      */
     @Override
+    @NbBundle.Messages({
+        "ReportExcel.exceptionMessage.dataTooLarge=Value is too long to fit into an Excel cell. ",
+        "ReportExcel.exceptionMessage.errorText=Error showing data into an Excel cell."
+    })
+
     public void addRow(List<String> rowData) {
         Row row = sheet.createRow(rowIndex);
         for (int i = 0; i < rowData.size(); ++i) {
-            row.createCell(i).setCellValue(rowData.get(i));
+            Cell excelCell = row.createCell(i);
+            try {
+                excelCell.setCellValue(rowData.get(i));
+            } catch (Exception e) {
+                if (e instanceof java.lang.IllegalArgumentException && rowData.get(i).length() > EXCEL_CELL_MAXIMUM_SIZE) {
+                    excelCell.setCellValue(Bundle.ReportExcel_exceptionMessage_dataTooLarge() + e.getMessage());
+                } else {
+                    excelCell.setCellValue(Bundle.ReportExcel_exceptionMessage_errorText());
+                }
+            }
         }
         ++rowIndex;
     }
@@ -284,41 +303,51 @@ class ReportExcel implements TableReportModule {
         return text.replaceAll("[\\/\\:\\?\\*\\\\]", "_");
     }
 
+    @Messages({
+        "ReportExcel.writeSummary.sheetName=Summary",
+        "ReportExcel.writeSummary.summary=Summary",
+        "ReportExcel.writeSummary.caseName=Case Name:",
+        "ReportExcel.writeSummary.numImages=Number of Images:",
+        "ReportExcel.writeSummary.caseNum=Case Number:",
+        "ReportExcel.writeSummary.caseNotes=Case Notes:",
+        "ReportExcel.writeSummary.examiner=Examiner:"
+    })
     private void writeSummaryWorksheet() {
-        sheet = wb.createSheet(NbBundle.getMessage(this.getClass(), "ReportExcel.sheetName.text"));
+        Case currentCase;
+        try {
+            currentCase = Case.getCurrentCaseThrows();
+        } catch (NoCurrentCaseException ex) {
+            logger.log(Level.SEVERE, "Exception while getting open case.", ex); //NON-NLS
+            return;
+        }
+        sheet = wb.createSheet(Bundle.ReportExcel_writeSummary_sheetName());
         rowIndex = 0;
 
         Row row = sheet.createRow(rowIndex);
         row.setRowStyle(setStyle);
-        row.createCell(0).setCellValue(NbBundle.getMessage(this.getClass(), "ReportExcel.cellVal.summary"));
+        row.createCell(0).setCellValue(Bundle.ReportExcel_writeSummary_summary());
         ++rowIndex;
 
         sheet.createRow(rowIndex);
         ++rowIndex;
 
-        Case currentCase = Case.getCurrentCase();
-
         row = sheet.createRow(rowIndex);
         row.setRowStyle(setStyle);
-        row.createCell(0).setCellValue(NbBundle.getMessage(this.getClass(), "ReportExcel.cellVal.caseName"));
-        row.createCell(1).setCellValue(currentCase.getName());
+        row.createCell(0).setCellValue(Bundle.ReportExcel_writeSummary_caseName());
+        row.createCell(1).setCellValue(currentCase.getDisplayName());
         ++rowIndex;
 
-        row = sheet.createRow(rowIndex);
-        row.setRowStyle(setStyle);
-        row.createCell(0).setCellValue(NbBundle.getMessage(this.getClass(), "ReportExcel.cellVal.caseNum"));
-        row.createCell(1).setCellValue(currentCase.getNumber());
-        ++rowIndex;
+        if (!currentCase.getNumber().isEmpty()) {
+            row = sheet.createRow(rowIndex);
+            row.setRowStyle(setStyle);
+            row.createCell(0).setCellValue(Bundle.ReportExcel_writeSummary_caseNum());
+            row.createCell(1).setCellValue(currentCase.getNumber());
+            ++rowIndex;
+        }
 
         row = sheet.createRow(rowIndex);
         row.setRowStyle(setStyle);
-        row.createCell(0).setCellValue(NbBundle.getMessage(this.getClass(), "ReportExcel.cellVal.examiner"));
-        row.createCell(1).setCellValue(currentCase.getExaminer());
-        ++rowIndex;
-
-        row = sheet.createRow(rowIndex);
-        row.setRowStyle(setStyle);
-        row.createCell(0).setCellValue(NbBundle.getMessage(this.getClass(), "ReportExcel.cellVal.numImages"));
+        row.createCell(0).setCellValue(Bundle.ReportExcel_writeSummary_numImages());
         int numImages;
         try {
             numImages = currentCase.getDataSources().size();
@@ -327,6 +356,22 @@ class ReportExcel implements TableReportModule {
         }
         row.createCell(1).setCellValue(numImages);
         ++rowIndex;
+
+        if (!currentCase.getCaseNotes().isEmpty()) {
+            row = sheet.createRow(rowIndex);
+            row.setRowStyle(setStyle);
+            row.createCell(0).setCellValue(Bundle.ReportExcel_writeSummary_caseNotes());
+            row.createCell(1).setCellValue(currentCase.getCaseNotes());
+            ++rowIndex;
+        }
+
+        if (!currentCase.getExaminer().isEmpty()) {
+            row = sheet.createRow(rowIndex);
+            row.setRowStyle(setStyle);
+            row.createCell(0).setCellValue(Bundle.ReportExcel_writeSummary_examiner());
+            row.createCell(1).setCellValue(currentCase.getExaminer());
+            ++rowIndex;
+        }
 
         sheet.autoSizeColumn(0);
         sheet.autoSizeColumn(1);

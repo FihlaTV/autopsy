@@ -21,6 +21,7 @@ package org.sleuthkit.autopsy.datamodel;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
 import javax.swing.Action;
 import org.openide.nodes.Children;
@@ -35,6 +36,7 @@ import org.sleuthkit.datamodel.Content;
 import org.sleuthkit.datamodel.TskCoreException;
 import org.sleuthkit.datamodel.VirtualDirectory;
 import org.sleuthkit.datamodel.Volume;
+import org.sleuthkit.autopsy.directorytree.FileSystemDetailsAction;
 
 /**
  * This class is used to represent the "Node" for the volume. Its child is the
@@ -72,12 +74,12 @@ public class VolumeNode extends AbstractContentNode<Volume> {
         // Listen for ingest events so that we can detect new added files (e.g. carved)
         IngestManager.getInstance().addIngestModuleEventListener(pcl);
         // Listen for case events so that we can detect when case is closed
-        Case.addPropertyChangeListener(pcl);
+        Case.addEventTypeSubscriber(EnumSet.of(Case.Events.CURRENT_CASE), pcl);
     }
 
     private void removeListeners() {
         IngestManager.getInstance().removeIngestModuleEventListener(pcl);
-        Case.removePropertyChangeListener(pcl);
+        Case.removeEventTypeSubscriber(EnumSet.of(Case.Events.CURRENT_CASE), pcl);
     }
 
     /*
@@ -138,7 +140,7 @@ public class VolumeNode extends AbstractContentNode<Volume> {
         for (Action a : super.getActions(true)) {
             actionsList.add(a);
         }
-
+        actionsList.add(new FileSystemDetailsAction(content));
         actionsList.add(new NewWindowViewAction(
                 NbBundle.getMessage(this.getClass(), "VolumeNode.getActions.viewInNewWin.text"), this));
         actionsList.addAll(ExplorerNodeActionVisitor.getActions(content));
@@ -148,44 +150,44 @@ public class VolumeNode extends AbstractContentNode<Volume> {
 
     @Override
     protected Sheet createSheet() {
-        Sheet s = super.createSheet();
-        Sheet.Set ss = s.get(Sheet.PROPERTIES);
-        if (ss == null) {
-            ss = Sheet.createPropertiesSet();
-            s.put(ss);
+        Sheet sheet = super.createSheet();
+        Sheet.Set sheetSet = sheet.get(Sheet.PROPERTIES);
+        if (sheetSet == null) {
+            sheetSet = Sheet.createPropertiesSet();
+            sheet.put(sheetSet);
         }
 
-        ss.put(new NodeProperty<>(NbBundle.getMessage(this.getClass(), "VolumeNode.createSheet.name.name"),
+        sheetSet.put(new NodeProperty<>(NbBundle.getMessage(this.getClass(), "VolumeNode.createSheet.name.name"),
                 NbBundle.getMessage(this.getClass(), "VolumeNode.createSheet.name.displayName"),
                 NbBundle.getMessage(this.getClass(), "VolumeNode.createSheet.name.desc"),
                 this.getDisplayName()));
-        ss.put(new NodeProperty<>(NbBundle.getMessage(this.getClass(), "VolumeNode.createSheet.id.name"),
+        sheetSet.put(new NodeProperty<>(NbBundle.getMessage(this.getClass(), "VolumeNode.createSheet.id.name"),
                 NbBundle.getMessage(this.getClass(), "VolumeNode.createSheet.id.displayName"),
                 NbBundle.getMessage(this.getClass(), "VolumeNode.createSheet.id.desc"),
                 content.getAddr()));
-        ss.put(new NodeProperty<>(NbBundle.getMessage(this.getClass(), "VolumeNode.createSheet.startSector.name"),
+        sheetSet.put(new NodeProperty<>(NbBundle.getMessage(this.getClass(), "VolumeNode.createSheet.startSector.name"),
                 NbBundle.getMessage(this.getClass(), "VolumeNode.createSheet.startSector.displayName"),
                 NbBundle.getMessage(this.getClass(), "VolumeNode.createSheet.startSector.desc"),
                 content.getStart()));
-        ss.put(new NodeProperty<>(NbBundle.getMessage(this.getClass(), "VolumeNode.createSheet.lenSectors.name"),
+        sheetSet.put(new NodeProperty<>(NbBundle.getMessage(this.getClass(), "VolumeNode.createSheet.lenSectors.name"),
                 NbBundle.getMessage(this.getClass(), "VolumeNode.createSheet.lenSectors.displayName"),
                 NbBundle.getMessage(this.getClass(), "VolumeNode.createSheet.lenSectors.desc"),
                 content.getLength()));
-        ss.put(new NodeProperty<>(NbBundle.getMessage(this.getClass(), "VolumeNode.createSheet.description.name"),
+        sheetSet.put(new NodeProperty<>(NbBundle.getMessage(this.getClass(), "VolumeNode.createSheet.description.name"),
                 NbBundle.getMessage(this.getClass(), "VolumeNode.createSheet.description.displayName"),
                 NbBundle.getMessage(this.getClass(), "VolumeNode.createSheet.description.desc"),
                 content.getDescription()));
-        ss.put(new NodeProperty<>(NbBundle.getMessage(this.getClass(), "VolumeNode.createSheet.flags.name"),
+        sheetSet.put(new NodeProperty<>(NbBundle.getMessage(this.getClass(), "VolumeNode.createSheet.flags.name"),
                 NbBundle.getMessage(this.getClass(), "VolumeNode.createSheet.flags.displayName"),
                 NbBundle.getMessage(this.getClass(), "VolumeNode.createSheet.flags.desc"),
                 content.getFlagsAsString()));
 
-        return s;
+        return sheet;
     }
 
     @Override
-    public <T> T accept(ContentNodeVisitor<T> v) {
-        return v.visit(this);
+    public <T> T accept(ContentNodeVisitor<T> visitor) {
+        return visitor.visit(this);
     }
 
     @Override
@@ -194,8 +196,8 @@ public class VolumeNode extends AbstractContentNode<Volume> {
     }
 
     @Override
-    public <T> T accept(DisplayableItemNodeVisitor<T> v) {
-        return v.visit(this);
+    public <T> T accept(DisplayableItemNodeVisitor<T> visitor) {
+        return visitor.visit(this);
     }
 
     @Override

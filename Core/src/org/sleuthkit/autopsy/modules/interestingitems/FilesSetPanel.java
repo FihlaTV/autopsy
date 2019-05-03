@@ -1,7 +1,7 @@
 /*
  * Autopsy Forensic Browser
  *
- * Copyright 2014-2016 Basis Technology Corp.
+ * Copyright 2014-2018 Basis Technology Corp.
  * Contact: carrier <at> sleuthkit <dot> org
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,11 +27,13 @@ import org.sleuthkit.autopsy.modules.interestingitems.FilesSetDefsPanel.PANEL_TY
  * A panel that allows a user to create and edit interesting files set
  * definitions.
  */
+@SuppressWarnings("PMD.SingularField") // UI widgets cause lots of false positives
 public class FilesSetPanel extends javax.swing.JPanel {
 
-    @NbBundle.Messages({"FilesSetPanel.ingest.title=File Ingest Filter", "FilesSetPanel.ingest.createNewFilter=Create/edit file ingest filter(s)..."})
+    @NbBundle.Messages({"FilesSetPanel.filter.title=File Filter", "FilesSetPanel.rule.title=File Filter Rule", "FilesSetPanel.ingest.createNewFilter=Create/edit file ingest filters...", "FilesSetPanel.ingest.messages.filtersMustBeNamed=File ingest filters must be named."})
 
     private static final String CREATE_NEW_FILE_INGEST_FILTER = Bundle.FilesSetPanel_ingest_createNewFilter();
+    private final String mustBeNamedErrorText;
 
     /**
      * @return the CREATE_NEW_FILE_INGEST_FILTER
@@ -47,8 +49,10 @@ public class FilesSetPanel extends javax.swing.JPanel {
         initComponents();
         if (panelType == PANEL_TYPE.FILE_INGEST_FILTERS) {
             ignoreKnownFilesCheckbox.setVisible(false);
+            mustBeNamedErrorText = NbBundle.getMessage(FilesSetPanel.class, "FilesSetPanel.ingest.messages.filtersMustBeNamed");
             org.openide.awt.Mnemonics.setLocalizedText(nameLabel, org.openide.util.NbBundle.getMessage(FilesSetPanel.class, "FilesSetPanel.ingest.nameLabel.text")); // NOI18N
         } else {
+            mustBeNamedErrorText = NbBundle.getMessage(FilesSetPanel.class, "FilesSetPanel.interesting.messages.filesSetsMustBeNamed");
             ignoreUnallocCheckbox.setVisible(false);
         }
     }
@@ -62,8 +66,10 @@ public class FilesSetPanel extends javax.swing.JPanel {
         initComponents();
         if (panelType == PANEL_TYPE.FILE_INGEST_FILTERS) {
             ignoreKnownFilesCheckbox.setVisible(false);
+            mustBeNamedErrorText = NbBundle.getMessage(FilesSetPanel.class, "FilesSetPanel.ingest.messages.filtersMustBeNamed");
         } else {
             ignoreUnallocCheckbox.setVisible(false);
+            mustBeNamedErrorText = NbBundle.getMessage(FilesSetPanel.class, "FilesSetPanel.interesting.messages.filesSetsMustBeNamed");
         }
         this.nameTextField.setText(filesSet.getName());
         this.descTextArea.setText(filesSet.getDescription());
@@ -81,7 +87,7 @@ public class FilesSetPanel extends javax.swing.JPanel {
     boolean isValidDefinition() {
         if (this.nameTextField.getText().isEmpty()) {
             NotifyDescriptor notifyDesc = new NotifyDescriptor.Message(
-                    NbBundle.getMessage(FilesSetPanel.class, "FilesSetPanel.messages.filesSetsMustBeNamed"),
+                    mustBeNamedErrorText,
                     NotifyDescriptor.WARNING_MESSAGE);
             DialogDisplayer.getDefault().notify(notifyDesc);
             return false;
@@ -167,7 +173,9 @@ public class FilesSetPanel extends javax.swing.JPanel {
         descPanel.setBorder(javax.swing.BorderFactory.createTitledBorder(org.openide.util.NbBundle.getMessage(FilesSetPanel.class, "FilesSetPanel.descPanel.border.title"))); // NOI18N
 
         descTextArea.setColumns(20);
+        descTextArea.setLineWrap(true);
         descTextArea.setRows(5);
+        descTextArea.setWrapStyleWord(true);
         descScrollPanel.setViewportView(descTextArea);
 
         javax.swing.GroupLayout descPanelLayout = new javax.swing.GroupLayout(descPanel);
@@ -202,7 +210,7 @@ public class FilesSetPanel extends javax.swing.JPanel {
                     .addComponent(descPanel, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
                     .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, layout.createSequentialGroup()
                         .addGap(0, 0, Short.MAX_VALUE)
-                        .addComponent(nameLabel, javax.swing.GroupLayout.PREFERRED_SIZE, 71, javax.swing.GroupLayout.PREFERRED_SIZE)
+                        .addComponent(nameLabel)
                         .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
                         .addComponent(nameTextField, javax.swing.GroupLayout.PREFERRED_SIZE, 299, javax.swing.GroupLayout.PREFERRED_SIZE))
                     .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, layout.createSequentialGroup()
@@ -223,7 +231,7 @@ public class FilesSetPanel extends javax.swing.JPanel {
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
                     .addComponent(ignoreKnownFilesCheckbox)
-                    .addComponent(ignoreUnallocCheckbox, javax.swing.GroupLayout.PREFERRED_SIZE, 23, javax.swing.GroupLayout.PREFERRED_SIZE))
+                    .addComponent(ignoreUnallocCheckbox))
                 .addContainerGap())
         );
     }// </editor-fold>//GEN-END:initComponents

@@ -1,7 +1,7 @@
 /*
  * Autopsy Forensic Browser
  *
- * Copyright 2011-2016 Basis Technology Corp.
+ * Copyright 2011-2018 Basis Technology Corp.
  * Contact: carrier <at> sleuthkit <dot> org
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -33,6 +33,7 @@ import org.openide.nodes.Sheet;
 import org.openide.util.NbBundle;
 import org.openide.util.lookup.Lookups;
 import org.sleuthkit.autopsy.casemodule.Case;
+import org.sleuthkit.autopsy.casemodule.NoCurrentCaseException;
 import org.sleuthkit.autopsy.coreutils.Logger;
 import org.sleuthkit.autopsy.coreutils.MessageNotifyUtil;
 import org.sleuthkit.autopsy.datamodel.DataModelActionsFactory;
@@ -81,11 +82,11 @@ public class EventNode extends DisplayableItemNode {
         "NodeProperty.displayName.known=Known",
         "NodeProperty.displayName.dateTime=Date/Time"})
     protected Sheet createSheet() {
-        Sheet s = super.createSheet();
-        Sheet.Set properties = s.get(Sheet.PROPERTIES);
+        Sheet sheet = super.createSheet();
+        Sheet.Set properties = sheet.get(Sheet.PROPERTIES);
         if (properties == null) {
             properties = Sheet.createPropertiesSet();
-            s.put(properties);
+            sheet.put(properties);
         }
 
         properties.put(new NodeProperty<>("icon", Bundle.NodeProperty_displayName_icon(), "icon", true)); // NON-NLS //gets overridden with icon
@@ -95,7 +96,7 @@ public class EventNode extends DisplayableItemNode {
         properties.put(new NodeProperty<>("eventSubType", Bundle.NodeProperty_displayName_subType(), "sub type", event.getEventType().getDisplayName())); // NON-NLS
         properties.put(new NodeProperty<>("Known", Bundle.NodeProperty_displayName_known(), "known", event.getKnown().toString())); // NON-NLS
 
-        return s;
+        return sheet;
     }
 
     /**
@@ -215,14 +216,14 @@ public class EventNode extends DisplayableItemNode {
      * @return An EventNode with the file (and artifact) backing this event in
      *         its lookup.
      */
-    public static EventNode createEventNode(final Long eventID, FilteredEventsModel eventsModel) throws TskCoreException, IllegalStateException {
+    public static EventNode createEventNode(final Long eventID, FilteredEventsModel eventsModel) throws TskCoreException, NoCurrentCaseException {
         /*
          * Look up the event by id and creata an EventNode with the appropriate
          * data in the lookup.
          */
         final SingleEvent eventById = eventsModel.getEventById(eventID);
 
-        SleuthkitCase sleuthkitCase = Case.getCurrentCase().getSleuthkitCase();
+        SleuthkitCase sleuthkitCase = Case.getCurrentCaseThrows().getSleuthkitCase();
         AbstractFile file = sleuthkitCase.getAbstractFileById(eventById.getFileID());
 
         if (eventById.getArtifactID().isPresent()) {

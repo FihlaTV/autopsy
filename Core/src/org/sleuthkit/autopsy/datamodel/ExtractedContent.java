@@ -1,7 +1,7 @@
 /*
  * Autopsy Forensic Browser
  *
- * Copyright 2011-2016 Basis Technology Corp.
+ * Copyright 2011-2019 Basis Technology Corp.
  * Contact: carrier <at> sleuthkit <dot> org
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,8 +23,10 @@ import java.beans.PropertyChangeListener;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Objects;
 import java.util.logging.Level;
 import org.openide.nodes.ChildFactory;
 import org.openide.nodes.Children;
@@ -33,17 +35,22 @@ import org.openide.nodes.Sheet;
 import org.openide.util.NbBundle;
 import org.openide.util.lookup.Lookups;
 import org.sleuthkit.autopsy.casemodule.Case;
+import org.sleuthkit.autopsy.casemodule.CasePreferences;
+import org.sleuthkit.autopsy.casemodule.NoCurrentCaseException;
 import org.sleuthkit.autopsy.coreutils.Logger;
 import org.sleuthkit.autopsy.ingest.IngestManager;
 import org.sleuthkit.autopsy.ingest.ModuleDataEvent;
+import org.sleuthkit.datamodel.Blackboard;
 import org.sleuthkit.datamodel.BlackboardArtifact;
 import static org.sleuthkit.datamodel.BlackboardArtifact.ARTIFACT_TYPE.TSK_ACCOUNT;
+import static org.sleuthkit.datamodel.BlackboardArtifact.ARTIFACT_TYPE.TSK_DATA_SOURCE_USAGE;
 import static org.sleuthkit.datamodel.BlackboardArtifact.ARTIFACT_TYPE.TSK_EMAIL_MSG;
 import static org.sleuthkit.datamodel.BlackboardArtifact.ARTIFACT_TYPE.TSK_GEN_INFO;
 import static org.sleuthkit.datamodel.BlackboardArtifact.ARTIFACT_TYPE.TSK_HASHSET_HIT;
 import static org.sleuthkit.datamodel.BlackboardArtifact.ARTIFACT_TYPE.TSK_INTERESTING_ARTIFACT_HIT;
 import static org.sleuthkit.datamodel.BlackboardArtifact.ARTIFACT_TYPE.TSK_INTERESTING_FILE_HIT;
 import static org.sleuthkit.datamodel.BlackboardArtifact.ARTIFACT_TYPE.TSK_KEYWORD_HIT;
+import static org.sleuthkit.datamodel.BlackboardArtifact.ARTIFACT_TYPE.TSK_DOWNLOAD_SOURCE;
 import org.sleuthkit.datamodel.SleuthkitCase;
 import org.sleuthkit.datamodel.TskCoreException;
 import org.sleuthkit.datamodel.TskException;
@@ -55,15 +62,34 @@ import org.sleuthkit.datamodel.TskException;
 public class ExtractedContent implements AutopsyVisitableItem {
 
     private SleuthkitCase skCase;   // set to null after case has been closed
+    private Blackboard blackboard;
     public static final String NAME = NbBundle.getMessage(RootNode.class, "ExtractedContentNode.name.text");
+    private final long datasourceObjId;
 
+    /**
+     * Constructs extracted content object 
+     * 
+     * @param skCase Case DB
+     */
     public ExtractedContent(SleuthkitCase skCase) {
-        this.skCase = skCase;
+        this(skCase, 0);
     }
 
+    /**
+     * Constructs extracted content object 
+     * 
+     * @param skCase Case DB
+     * @param objId Object id of the parent datasource 
+     */
+    public ExtractedContent(SleuthkitCase skCase, long objId) {
+        this.skCase = skCase;
+        this.datasourceObjId = objId;
+        this.blackboard = skCase.getBlackboard();
+    }
+    
     @Override
-    public <T> T accept(AutopsyItemVisitor<T> v) {
-        return v.visit(this);
+    public <T> T accept(AutopsyItemVisitor<T> visitor) {
+        return visitor.visit(this);
     }
 
     public SleuthkitCase getSleuthkitCase() {
@@ -120,7 +146,8 @@ public class ExtractedContent implements AutopsyVisitableItem {
             return filePath + "gps-search.png"; //NON-NLS
         } else if (typeID == BlackboardArtifact.ARTIFACT_TYPE.TSK_PROG_RUN.getTypeID()) {
             return filePath + "installed.png"; //NON-NLS
-        } else if (typeID == BlackboardArtifact.ARTIFACT_TYPE.TSK_ENCRYPTION_DETECTED.getTypeID()) {
+        } else if (typeID == BlackboardArtifact.ARTIFACT_TYPE.TSK_ENCRYPTION_DETECTED.getTypeID() || 
+                typeID == BlackboardArtifact.ARTIFACT_TYPE.TSK_ENCRYPTION_SUSPECTED.getTypeID()) {
             return filePath + "encrypted-file.png"; //NON-NLS
         } else if (typeID == BlackboardArtifact.ARTIFACT_TYPE.TSK_EXT_MISMATCH_DETECTED.getTypeID()) {
             return filePath + "mismatch-16.png"; //NON-NLS
@@ -130,6 +157,18 @@ public class ExtractedContent implements AutopsyVisitableItem {
             return filePath + "drive_network.png"; //NON-NLS
         } else if (typeID == BlackboardArtifact.ARTIFACT_TYPE.TSK_FACE_DETECTED.getTypeID()) {
             return filePath + "face.png"; //NON-NLS
+        } else if (typeID == BlackboardArtifact.ARTIFACT_TYPE.TSK_WIFI_NETWORK.getTypeID()) {
+            return filePath + "network-wifi.png"; //NON-NLS
+        } else if (typeID == BlackboardArtifact.ARTIFACT_TYPE.TSK_WIFI_NETWORK_ADAPTER.getTypeID()) {
+            return filePath + "network-wifi.png"; //NON-NLS
+        } else if (typeID == BlackboardArtifact.ARTIFACT_TYPE.TSK_SIM_ATTACHED.getTypeID()) {
+            return filePath + "sim_card.png"; //NON-NLS
+        } else if (typeID == BlackboardArtifact.ARTIFACT_TYPE.TSK_BLUETOOTH_ADAPTER.getTypeID()) {
+            return filePath + "Bluetooth.png"; //NON-NLS
+        } else if (typeID == BlackboardArtifact.ARTIFACT_TYPE.TSK_DEVICE_INFO.getTypeID()) {
+            return filePath + "devices.png"; //NON-NLS
+        } else if (typeID == BlackboardArtifact.ARTIFACT_TYPE.TSK_VERIFICATION_FAILED.getTypeID()) {
+            return filePath + "validationFailed.png"; //NON-NLS
         }
         return filePath + "artifact-icon.png"; //NON-NLS
     }
@@ -149,24 +188,24 @@ public class ExtractedContent implements AutopsyVisitableItem {
         }
 
         @Override
-        public <T> T accept(DisplayableItemNodeVisitor<T> v) {
-            return v.visit(this);
+        public <T> T accept(DisplayableItemNodeVisitor<T> visitor) {
+            return visitor.visit(this);
         }
 
         @Override
         protected Sheet createSheet() {
-            Sheet s = super.createSheet();
-            Sheet.Set ss = s.get(Sheet.PROPERTIES);
-            if (ss == null) {
-                ss = Sheet.createPropertiesSet();
-                s.put(ss);
+            Sheet sheet = super.createSheet();
+            Sheet.Set sheetSet = sheet.get(Sheet.PROPERTIES);
+            if (sheetSet == null) {
+                sheetSet = Sheet.createPropertiesSet();
+                sheet.put(sheetSet);
             }
 
-            ss.put(new NodeProperty<>(NbBundle.getMessage(this.getClass(), "ExtractedContentNode.createSheet.name.name"),
+            sheetSet.put(new NodeProperty<>(NbBundle.getMessage(this.getClass(), "ExtractedContentNode.createSheet.name.name"),
                     NbBundle.getMessage(this.getClass(), "ExtractedContentNode.createSheet.name.displayName"),
                     NbBundle.getMessage(this.getClass(), "ExtractedContentNode.createSheet.name.desc"),
                     NAME));
-            return s;
+            return sheet;
         }
 
         @Override
@@ -197,6 +236,8 @@ public class ExtractedContent implements AutopsyVisitableItem {
             doNotShow.add(new BlackboardArtifact.Type(TSK_INTERESTING_FILE_HIT));
             doNotShow.add(new BlackboardArtifact.Type(TSK_INTERESTING_ARTIFACT_HIT));
             doNotShow.add(new BlackboardArtifact.Type(TSK_ACCOUNT));
+            doNotShow.add(new BlackboardArtifact.Type(TSK_DATA_SOURCE_USAGE));
+            doNotShow.add(new BlackboardArtifact.Type(TSK_DOWNLOAD_SOURCE) );
         }
 
         private final PropertyChangeListener pcl = (PropertyChangeEvent evt) -> {
@@ -208,7 +249,7 @@ public class ExtractedContent implements AutopsyVisitableItem {
                  * may be received for a case that is already closed.
                  */
                 try {
-                    Case.getCurrentCase();
+                    Case.getCurrentCaseThrows();
                     /**
                      * Due to some unresolved issues with how cases are closed,
                      * it is possible for the event to have a null oldValue if
@@ -218,7 +259,7 @@ public class ExtractedContent implements AutopsyVisitableItem {
                     if (null != event && !(this.doNotShow.contains(event.getBlackboardArtifactType()))) {
                         refresh(true);
                     }
-                } catch (IllegalStateException notUsed) {
+                } catch (NoCurrentCaseException notUsed) {
                     /**
                      * Case is closed, do nothing.
                      */
@@ -231,9 +272,9 @@ public class ExtractedContent implements AutopsyVisitableItem {
                  * may be received for a case that is already closed.
                  */
                 try {
-                    Case.getCurrentCase();
+                    Case.getCurrentCaseThrows();
                     refresh(true);
-                } catch (IllegalStateException notUsed) {
+                } catch (NoCurrentCaseException notUsed) {
                     /**
                      * Case is closed, do nothing.
                      */
@@ -251,23 +292,25 @@ public class ExtractedContent implements AutopsyVisitableItem {
         protected void addNotify() {
             IngestManager.getInstance().addIngestJobEventListener(pcl);
             IngestManager.getInstance().addIngestModuleEventListener(pcl);
-            Case.addPropertyChangeListener(pcl);
+            Case.addEventTypeSubscriber(EnumSet.of(Case.Events.CURRENT_CASE), pcl);
         }
 
         @Override
         protected void removeNotify() {
             IngestManager.getInstance().removeIngestJobEventListener(pcl);
             IngestManager.getInstance().removeIngestModuleEventListener(pcl);
-            Case.removePropertyChangeListener(pcl);
+            Case.removeEventTypeSubscriber(EnumSet.of(Case.Events.CURRENT_CASE), pcl);
             typeNodeList.clear();
         }
 
         @Override
         protected boolean createKeys(List<BlackboardArtifact.Type> list) {
-            //TEST COMMENT
             if (skCase != null) {
                 try {
-                    List<BlackboardArtifact.Type> types = skCase.getArtifactTypesInUse();
+                    List<BlackboardArtifact.Type> types = Objects.equals(CasePreferences.getGroupItemsInTreeByDataSource(), true) ? 
+                            blackboard.getArtifactTypesInUse(datasourceObjId) :
+                            skCase.getArtifactTypesInUse() ;
+                    
                     types.removeAll(doNotShow);
                     Collections.sort(types,
                             new Comparator<BlackboardArtifact.Type>() {
@@ -309,7 +352,7 @@ public class ExtractedContent implements AutopsyVisitableItem {
      */
     public class TypeNode extends DisplayableItemNode {
 
-        private BlackboardArtifact.Type type;
+        private final BlackboardArtifact.Type type;
         private long childCount = 0;
 
         TypeNode(BlackboardArtifact.Type type) {
@@ -329,7 +372,9 @@ public class ExtractedContent implements AutopsyVisitableItem {
             //    a performance increase might be had by adding a 
             //    "getBlackboardArtifactCount()" method to skCase
             try {
-                this.childCount = skCase.getBlackboardArtifactsTypeCount(type.getTypeID());
+                this.childCount = Objects.equals(CasePreferences.getGroupItemsInTreeByDataSource(), true) ? 
+                        blackboard.getArtifactsCount(type.getTypeID(), datasourceObjId) :
+                        skCase.getBlackboardArtifactsTypeCount(type.getTypeID());
             } catch (TskException ex) {
                 Logger.getLogger(TypeNode.class.getName())
                         .log(Level.WARNING, "Error getting child count", ex); //NON-NLS
@@ -339,29 +384,29 @@ public class ExtractedContent implements AutopsyVisitableItem {
 
         @Override
         protected Sheet createSheet() {
-            Sheet s = super.createSheet();
-            Sheet.Set ss = s.get(Sheet.PROPERTIES);
-            if (ss == null) {
-                ss = Sheet.createPropertiesSet();
-                s.put(ss);
+            Sheet sheet = super.createSheet();
+            Sheet.Set sheetSet = sheet.get(Sheet.PROPERTIES);
+            if (sheetSet == null) {
+                sheetSet = Sheet.createPropertiesSet();
+                sheet.put(sheetSet);
             }
 
-            ss.put(new NodeProperty<>(NbBundle.getMessage(this.getClass(), "ArtifactTypeNode.createSheet.artType.name"),
+            sheetSet.put(new NodeProperty<>(NbBundle.getMessage(this.getClass(), "ArtifactTypeNode.createSheet.artType.name"),
                     NbBundle.getMessage(this.getClass(), "ArtifactTypeNode.createSheet.artType.displayName"),
                     NbBundle.getMessage(this.getClass(), "ArtifactTypeNode.createSheet.artType.desc"),
                     type.getDisplayName()));
 
-            ss.put(new NodeProperty<>(NbBundle.getMessage(this.getClass(), "ArtifactTypeNode.createSheet.childCnt.name"),
+            sheetSet.put(new NodeProperty<>(NbBundle.getMessage(this.getClass(), "ArtifactTypeNode.createSheet.childCnt.name"),
                     NbBundle.getMessage(this.getClass(), "ArtifactTypeNode.createSheet.childCnt.displayName"),
                     NbBundle.getMessage(this.getClass(), "ArtifactTypeNode.createSheet.childCnt.desc"),
                     childCount));
 
-            return s;
+            return sheet;
         }
 
         @Override
-        public <T> T accept(DisplayableItemNodeVisitor<T> v) {
-            return v.visit(this);
+        public <T> T accept(DisplayableItemNodeVisitor<T> visitor) {
+            return visitor.visit(this);
         }
 
         @Override
@@ -399,7 +444,7 @@ public class ExtractedContent implements AutopsyVisitableItem {
                      * that is already closed.
                      */
                     try {
-                        Case.getCurrentCase();
+                        Case.getCurrentCaseThrows();
                         /**
                          * Even with the check above, it is still possible that
                          * the case will be closed in a different thread before
@@ -410,7 +455,7 @@ public class ExtractedContent implements AutopsyVisitableItem {
                         if (null != event && event.getBlackboardArtifactType().equals(type)) {
                             refresh(true);
                         }
-                    } catch (IllegalStateException notUsed) {
+                    } catch (NoCurrentCaseException notUsed) {
                         /**
                          * Case is closed, do nothing.
                          */
@@ -424,9 +469,9 @@ public class ExtractedContent implements AutopsyVisitableItem {
                      * that is already closed.
                      */
                     try {
-                        Case.getCurrentCase();
+                        Case.getCurrentCaseThrows();
                         refresh(true);
-                    } catch (IllegalStateException notUsed) {
+                    } catch (NoCurrentCaseException notUsed) {
                         /**
                          * Case is closed, do nothing.
                          */
@@ -451,7 +496,10 @@ public class ExtractedContent implements AutopsyVisitableItem {
         protected boolean createKeys(List<BlackboardArtifact> list) {
             if (skCase != null) {
                 try {
-                    List<BlackboardArtifact> arts = skCase.getBlackboardArtifacts(type.getTypeID());
+                    List<BlackboardArtifact> arts = 
+                            Objects.equals(CasePreferences.getGroupItemsInTreeByDataSource(), true) ?
+                            blackboard.getArtifacts(type.getTypeID(), datasourceObjId) :
+                            skCase.getBlackboardArtifacts(type.getTypeID());
                     list.addAll(arts);
                 } catch (TskException ex) {
                     Logger.getLogger(ArtifactFactory.class.getName()).log(Level.SEVERE, "Couldn't get blackboard artifacts from database", ex); //NON-NLS

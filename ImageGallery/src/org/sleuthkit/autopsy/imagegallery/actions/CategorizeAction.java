@@ -1,7 +1,7 @@
 /*
  * Autopsy Forensic Browser
  *
- * Copyright 2013-16 Basis Technology Corp.
+ * Copyright 2013-2018 Basis Technology Corp.
  * Contact: carrier <at> sleuthkit <dot> org
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -38,9 +38,10 @@ import javax.swing.JOptionPane;
 import org.controlsfx.control.action.Action;
 import org.controlsfx.control.action.ActionUtils;
 import org.openide.util.NbBundle;
+import org.openide.windows.WindowManager;
 import org.sleuthkit.autopsy.coreutils.Logger;
 import org.sleuthkit.autopsy.imagegallery.ImageGalleryController;
-import org.sleuthkit.autopsy.imagegallery.datamodel.Category;
+import org.sleuthkit.autopsy.datamodel.DhsImageCategory;
 import org.sleuthkit.autopsy.imagegallery.datamodel.CategoryManager;
 import org.sleuthkit.autopsy.imagegallery.datamodel.DrawableAttribute;
 import org.sleuthkit.autopsy.imagegallery.datamodel.DrawableFile;
@@ -56,19 +57,19 @@ import org.sleuthkit.datamodel.TskCoreException;
 @NbBundle.Messages({"CategorizeAction.displayName=Categorize"})
 public class CategorizeAction extends Action {
 
-    private static final Logger LOGGER = Logger.getLogger(CategorizeAction.class.getName());
+    private static final Logger logger = Logger.getLogger(CategorizeAction.class.getName());
 
     private final ImageGalleryController controller;
     private final UndoRedoManager undoManager;
-    private final Category cat;
+    private final DhsImageCategory cat;
     private final Set<Long> selectedFileIDs;
     private final Boolean createUndo;
 
-    public CategorizeAction(ImageGalleryController controller, Category cat, Set<Long> selectedFileIDs) {
+    public CategorizeAction(ImageGalleryController controller, DhsImageCategory cat, Set<Long> selectedFileIDs) {
         this(controller, cat, selectedFileIDs, true);
     }
 
-    private CategorizeAction(ImageGalleryController controller, Category cat, Set<Long> selectedFileIDs, Boolean createUndo) {
+    private CategorizeAction(ImageGalleryController controller, DhsImageCategory cat, Set<Long> selectedFileIDs, Boolean createUndo) {
         super(cat.getDisplayName());
         this.controller = controller;
         this.undoManager = controller.getUndoManager();
@@ -87,7 +88,7 @@ public class CategorizeAction extends Action {
 
     final void addCatToFiles(Set<Long> ids) {
         Logger.getAnonymousLogger().log(Level.INFO, "categorizing{0} as {1}", new Object[]{ids.toString(), cat.getDisplayName()}); //NON-NLS
-        controller.queueDBWorkerTask(new CategorizeTask(ids, cat, createUndo));
+        controller.queueDBTask(new CategorizeTask(ids, cat, createUndo));
     }
 
     /**
@@ -103,7 +104,7 @@ public class CategorizeAction extends Action {
 
             // Each category get an item in the sub-menu. Selecting one of these menu items adds
             // a tag with the associated category.
-            for (final Category cat : Category.values()) {
+            for (final DhsImageCategory cat : DhsImageCategory.values()) {
                 MenuItem categoryItem = ActionUtils.createMenuItem(new CategorizeAction(controller, cat, selected));
                 getItems().add(categoryItem);
             }
@@ -118,9 +119,9 @@ public class CategorizeAction extends Action {
         private final Set<Long> fileIDs;
 
         private final boolean createUndo;
-        private final Category cat;
+        private final DhsImageCategory cat;
 
-        CategorizeTask(Set<Long> fileIDs, @Nonnull Category cat, boolean createUndo) {
+        CategorizeTask(Set<Long> fileIDs, @Nonnull DhsImageCategory cat, boolean createUndo) {
             super();
             this.fileIDs = fileIDs;
             java.util.Objects.requireNonNull(cat);
@@ -132,14 +133,14 @@ public class CategorizeAction extends Action {
         public void run() {
             final DrawableTagsManager tagsManager = controller.getTagsManager();
             final CategoryManager categoryManager = controller.getCategoryManager();
-            Map<Long, Category> oldCats = new HashMap<>();
+            Map<Long, DhsImageCategory> oldCats = new HashMap<>();
             TagName tagName = categoryManager.getTagName(cat);
-            TagName catZeroTagName = categoryManager.getTagName(Category.ZERO);
+            TagName catZeroTagName = categoryManager.getTagName(DhsImageCategory.ZERO);
             for (long fileID : fileIDs) {
                 try {
-                    DrawableFile file = controller.getFileFromId(fileID);   //drawable db access
+                    DrawableFile file = controller.getFileFromID(fileID);   //drawable db access
                     if (createUndo) {
-                        Category oldCat = file.getCategory();  //drawable db access
+                        DhsImageCategory oldCat = file.getCategory();  //drawable db access
                         TagName oldCatTagName = categoryManager.getTagName(oldCat);
                         if (false == tagName.equals(oldCatTagName)) {
                             oldCats.put(fileID, oldCat);
@@ -147,7 +148,7 @@ public class CategorizeAction extends Action {
                     }
 
                     final List<ContentTag> fileTags = tagsManager.getContentTags(file);
-                    if (tagName == categoryManager.getTagName(Category.ZERO)) {
+                    if (tagName == categoryManager.getTagName(DhsImageCategory.ZERO)) {
                         // delete all cat tags for cat-0
                         fileTags.stream()
                                 .filter(tag -> CategoryManager.isCategoryTagName(tag.getName()))
@@ -155,7 +156,7 @@ public class CategorizeAction extends Action {
                                     try {
                                         tagsManager.deleteContentTag(ct);
                                     } catch (TskCoreException ex) {
-                                        LOGGER.log(Level.SEVERE, "Error removing old categories result", ex); //NON-NLS
+                                        logger.log(Level.SEVERE, "Error removing old categories result", ex); //NON-NLS
                                     }
                                 });
                     } else {
@@ -168,8 +169,8 @@ public class CategorizeAction extends Action {
                         }
                     }
                 } catch (TskCoreException ex) {
-                    LOGGER.log(Level.SEVERE, "Error categorizing result", ex); //NON-NLS
-                    JOptionPane.showMessageDialog(null,
+                    logger.log(Level.SEVERE, "Error categorizing result", ex); //NON-NLS
+                    JOptionPane.showMessageDialog(WindowManager.getDefault().getMainWindow(),
                             Bundle.CategorizeTask_errorUnable_msg(fileID),
                             Bundle.CategorizeTask_errorUnable_title(),
                             JOptionPane.ERROR_MESSAGE);
@@ -189,11 +190,11 @@ public class CategorizeAction extends Action {
     @Immutable
     private final class CategorizationChange implements UndoRedoManager.UndoableCommand {
 
-        private final Category newCategory;
-        private final ImmutableMap<Long, Category> oldCategories;
+        private final DhsImageCategory newCategory;
+        private final ImmutableMap<Long, DhsImageCategory> oldCategories;
         private final ImageGalleryController controller;
 
-        CategorizationChange(ImageGalleryController controller, Category newCategory, Map<Long, Category> oldCategories) {
+        CategorizationChange(ImageGalleryController controller, DhsImageCategory newCategory, Map<Long, DhsImageCategory> oldCategories) {
             this.controller = controller;
             this.newCategory = newCategory;
             this.oldCategories = ImmutableMap.copyOf(oldCategories);
@@ -216,7 +217,7 @@ public class CategorizeAction extends Action {
         @Override
         public void undo() {
 
-            for (Map.Entry<Long, Category> entry : oldCategories.entrySet()) {
+            for (Map.Entry<Long, DhsImageCategory> entry : oldCategories.entrySet()) {
                 new CategorizeAction(controller, entry.getValue(), Collections.singleton(entry.getKey()), false)
                         .handle(null);
             }

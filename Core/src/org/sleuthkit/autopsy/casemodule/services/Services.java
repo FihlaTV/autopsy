@@ -2,7 +2,7 @@
  *
  * Autopsy Forensic Browser
  *
- * Copyright 2011-2016 Basis Technology Corp.
+ * Copyright 2011-2017 Basis Technology Corp.
  * Contact: carrier <at> sleuthkit <dot> org
  * Copyright 2012 42six Solutions.
  * Contact: aebadirad <at> 42six <dot> com
@@ -54,6 +54,9 @@ public class Services implements Closeable {
         tagsManager = new TagsManager(caseDb);
         services.add(tagsManager);
 
+        //This lookup fails in the functional test code. See JIRA-4571 for details.
+        //For the time being, the closing of this service at line 108 will be made
+        //null safe so that the functional tests run with no issues.
         keywordSearchService = Lookup.getDefault().lookup(KeywordSearchService.class);
         services.add(keywordSearchService);
 
@@ -105,7 +108,9 @@ public class Services implements Closeable {
     @Override
     public void close() throws IOException {
         for (Closeable service : services) {
-            service.close();
+            if(service != null) {
+                 service.close();
+             }
         }
     }
 

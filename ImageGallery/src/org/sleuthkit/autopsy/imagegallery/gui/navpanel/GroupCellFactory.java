@@ -173,7 +173,7 @@ class GroupCellFactory {
         private final InvalidationListener groupListener = new GroupListener<>(this);
 
         /**
-         * reference to group files listener that allows us to remove it from a
+         * Reference to group files listener that allows us to remove it from a
          * group when a new group is assigned to this Cell
          */
         @Override
@@ -249,7 +249,7 @@ class GroupCellFactory {
         @Override
         public String getGroupName() {
             return Optional.ofNullable(getItem())
-                    .map(group -> group.getGroupByValueDislpayName())
+                    .map(group -> StringUtils.defaultIfBlank(group.getGroupByValueDislpayName(), DrawableGroup.getBlankGroupName()))
                     .orElse("");
         }
 

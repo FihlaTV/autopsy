@@ -2,7 +2,7 @@
  *
  * Autopsy Forensic Browser
  * 
- * Copyright 2012-2014 Basis Technology Corp.
+ * Copyright 2012-2018 Basis Technology Corp.
  * 
  * Copyright 2012 42six Solutions.
  * Contact: aebadirad <at> 42six <dot> com
@@ -31,6 +31,7 @@ import javax.swing.JPanel;
 
 import org.openide.util.NbBundle;
 import org.sleuthkit.autopsy.casemodule.Case;
+import org.sleuthkit.autopsy.casemodule.NoCurrentCaseException;
 import org.sleuthkit.autopsy.coreutils.Logger;
 import org.sleuthkit.autopsy.ingest.IngestManager;
 import org.sleuthkit.autopsy.report.ReportProgressPanel.ReportStatus;
@@ -73,11 +74,17 @@ class ReportBodyFile implements GeneralReportModule {
     @SuppressWarnings("deprecation")
     public void generateReport(String baseReportDir, ReportProgressPanel progressPanel) {
         // Start the progress bar and setup the report
+        try {
+            currentCase = Case.getCurrentCaseThrows();
+        } catch (NoCurrentCaseException ex) {
+            logger.log(Level.SEVERE, "Exception while getting open case.", ex);
+            return;
+        }
         progressPanel.setIndeterminate(false);
         progressPanel.start();
         progressPanel.updateStatusLabel(NbBundle.getMessage(this.getClass(), "ReportBodyFile.progress.querying"));
-        reportPath = baseReportDir + "BodyFile.txt"; //NON-NLS
-        currentCase = Case.getCurrentCase();
+        reportPath = baseReportDir + getRelativeFilePath(); //NON-NLS
+        
         skCase = currentCase.getSleuthkitCase();
 
         // Run query to get all files
@@ -154,14 +161,14 @@ class ReportBodyFile implements GeneralReportModule {
                     if (out != null) {
                         out.flush();
                         out.close();
-                        Case.getCurrentCase().addReport(reportPath,
+                        Case.getCurrentCaseThrows().addReport(reportPath,
                                 NbBundle.getMessage(this.getClass(),
                                         "ReportBodyFile.generateReport.srcModuleName.text"), "");
 
                     }
                 } catch (IOException ex) {
                     logger.log(Level.WARNING, "Could not flush and close the BufferedWriter.", ex); //NON-NLS
-                } catch (TskCoreException ex) {
+                } catch (TskCoreException | NoCurrentCaseException ex) {
                     String errorMessage = String.format("Error adding %s to case as a report", reportPath); //NON-NLS
                     logger.log(Level.SEVERE, errorMessage, ex);
                 }

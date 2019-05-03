@@ -18,15 +18,17 @@
  */
 package org.sleuthkit.autopsy.datamodel;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.logging.Level;
 import javax.swing.Action;
+import org.apache.commons.lang3.StringUtils;
 import org.openide.nodes.Children;
 import org.openide.nodes.Sheet;
 import org.openide.util.NbBundle;
+import org.openide.util.NbBundle.Messages;
 import org.openide.util.lookup.Lookups;
-import org.sleuthkit.autopsy.actions.DeleteContentTagAction;
 import org.sleuthkit.autopsy.coreutils.Logger;
 import org.sleuthkit.autopsy.timeline.actions.ViewFileInTimelineAction;
 import org.sleuthkit.datamodel.AbstractFile;
@@ -55,6 +57,10 @@ class ContentTagNode extends DisplayableItemNode {
         this.tag = tag;
     }
 
+    @Messages({
+        "ContentTagNode.createSheet.artifactMD5.displayName=MD5 Hash",
+        "ContentTagNode.createSheet.artifactMD5.name=MD5 Hash",
+        "ContentTagNode.createSheet.userName.text=User Name"})
     @Override
     protected Sheet createSheet() {
         Content content = tag.getContent();
@@ -105,27 +111,37 @@ class ContentTagNode extends DisplayableItemNode {
                 NbBundle.getMessage(this.getClass(), "ContentTagNode.createSheet.fileSize.displayName"),
                 "",
                 content.getSize()));
-
+        properties.put(new NodeProperty<>(Bundle.ContentTagNode_createSheet_artifactMD5_name(),
+                Bundle.ContentTagNode_createSheet_artifactMD5_displayName(),
+                "",
+                file != null ? StringUtils.defaultString(file.getMd5Hash()) : ""));
+        properties.put(new NodeProperty<>(
+                NbBundle.getMessage(this.getClass(), "ContentTagNode.createSheet.userName.text"),
+                NbBundle.getMessage(this.getClass(), "ContentTagNode.createSheet.userName.text"),
+                "",
+                tag.getUserName()));
         return propertySheet;
     }
 
     @Override
     public Action[] getActions(boolean context) {
-        List<Action> actions = DataModelActionsFactory.getActions(tag.getContent(), false);
+        List<Action> actions = new ArrayList<>();
         actions.addAll(Arrays.asList(super.getActions(context)));
 
-        AbstractFile file = getLookup().lookup(AbstractFile.class);
+        AbstractFile file = getLookup().lookup(AbstractFile.class
+        );
         if (file != null) {
             actions.add(ViewFileInTimelineAction.createViewFileAction(file));
         }
-        actions.add(null); // Adds a menu item separator.
-        actions.add(DeleteContentTagAction.getInstance());
+
+        actions.addAll(DataModelActionsFactory.getActions(tag, false));
+
         return actions.toArray(new Action[actions.size()]);
     }
 
     @Override
-    public <T> T accept(DisplayableItemNodeVisitor<T> v) {
-        return v.visit(this);
+    public <T> T accept(DisplayableItemNodeVisitor<T> visitor) {
+        return visitor.visit(this);
     }
 
     @Override

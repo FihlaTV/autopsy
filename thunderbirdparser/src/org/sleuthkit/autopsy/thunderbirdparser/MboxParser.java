@@ -56,6 +56,7 @@ import org.apache.james.mime4j.stream.MimeConfig;
 import org.apache.tika.parser.txt.CharsetDetector;
 import org.apache.tika.parser.txt.CharsetMatch;
 import org.openide.util.NbBundle;
+import org.sleuthkit.autopsy.casemodule.NoCurrentCaseException;
 import org.sleuthkit.autopsy.ingest.IngestServices;
 import org.sleuthkit.datamodel.TskData;
 import org.sleuthkit.datamodel.EncodedFileOutputStream;
@@ -229,17 +230,21 @@ class MboxParser {
         try {
             r = new BufferedReader(tb.getReader());
             StringBuilder bodyString = new StringBuilder();
+            StringBuilder headersString = new StringBuilder();
             String line;
             while ((line = r.readLine()) != null) {
                 bodyString.append(line).append("\n");
             }
-            bodyString.append("\n-----HEADERS-----\n");
+            
+            headersString.append("\n-----HEADERS-----\n");
             for(Field field: fields) {
                 String nextLine = field.getName() + ": " + field.getBody();
-                bodyString.append("\n").append(nextLine);
+                headersString.append("\n").append(nextLine);
             }
-            bodyString.append("\n\n---END HEADERS--\n\n");
+            headersString.append("\n\n---END HEADERS--\n\n");
 
+            email.setHeaders(headersString.toString());
+            
             switch (type) {
                 case ContentTypeField.TYPE_TEXT_PLAIN:
                     email.setTextBody(bodyString.toString());
@@ -263,8 +268,18 @@ class MboxParser {
      * @param email
      * @param e
      */
+    @NbBundle.Messages ({"MboxParser.handleAttch.noOpenCase.errMsg=Exception while getting open case."})
     private void handleAttachment(EmailMessage email, Entity e, long fileID, int index) {
-        String outputDirPath = ThunderbirdMboxFileIngestModule.getModuleOutputPath() + File.separator;
+        String outputDirPath;
+        String relModuleOutputPath;
+        try {
+            outputDirPath = ThunderbirdMboxFileIngestModule.getModuleOutputPath() + File.separator;
+            relModuleOutputPath = ThunderbirdMboxFileIngestModule.getRelModuleOutputPath() + File.separator;
+        } catch (NoCurrentCaseException ex) {
+            addErrorMessage(Bundle.MboxParser_handleAttch_noOpenCase_errMsg());
+            logger.log(Level.SEVERE, Bundle.MboxParser_handleAttch_noOpenCase_errMsg(), ex); //NON-NLS
+            return;       
+        }
         String filename = e.getFilename();
 
         // sanitize name.  Had an attachment with a Japanese encoded path that 
@@ -321,8 +336,7 @@ class MboxParser {
 
         EmailMessage.Attachment attach = new EmailMessage.Attachment();
         attach.setName(filename);
-        attach.setLocalPath(ThunderbirdMboxFileIngestModule.getRelModuleOutputPath()
-                + File.separator + uniqueFilename);
+        attach.setLocalPath(relModuleOutputPath + uniqueFilename);
         attach.setSize(new File(outPath).length());
         attach.setEncodingType(TskData.EncodingType.XOR1);
         email.addAttachment(attach);

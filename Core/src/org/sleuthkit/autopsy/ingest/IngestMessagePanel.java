@@ -1,7 +1,7 @@
 /*
  * Autopsy Forensic Browser
  *
- * Copyright 2011-2014 Basis Technology Corp.
+ * Copyright 2011-2018 Basis Technology Corp.
  * Contact: carrier <at> sleuthkit <dot> org
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -36,6 +36,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
+import javax.swing.DefaultComboBoxModel;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JTable;
@@ -51,14 +52,13 @@ import javax.swing.table.TableCellRenderer;
 import org.openide.util.NbBundle;
 import org.sleuthkit.autopsy.coreutils.Logger;
 import org.sleuthkit.autopsy.coreutils.MessageNotifyUtil;
-import org.sleuthkit.autopsy.ingest.IngestMessage.*;
 import org.sleuthkit.autopsy.ingest.IngestMessage.MessageType;
 import org.sleuthkit.datamodel.BlackboardArtifact;
 
 /**
  * Notification window showing messages from modules to user
- *
  */
+@SuppressWarnings("PMD.SingularField") // UI widgets cause lots of false positives
 class IngestMessagePanel extends JPanel implements TableModelListener {
 
     private final MessageTableModel tableModel;
@@ -181,11 +181,11 @@ class IngestMessagePanel extends JPanel implements TableModelListener {
                 .addGap(101, 101, 101)
                 .addComponent(totalMessagesNameLabel)
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addComponent(totalMessagesNameVal, javax.swing.GroupLayout.DEFAULT_SIZE, 24, Short.MAX_VALUE)
+                .addComponent(totalMessagesNameVal, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
                 .addGap(22, 22, 22)
                 .addComponent(totalUniqueMessagesNameLabel)
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addComponent(totalUniqueMessagesNameVal, javax.swing.GroupLayout.DEFAULT_SIZE, 24, Short.MAX_VALUE)
+                .addComponent(totalUniqueMessagesNameVal, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
                 .addGap(22, 22, 22))
         );
         controlPanelLayout.setVerticalGroup(
@@ -204,7 +204,7 @@ class IngestMessagePanel extends JPanel implements TableModelListener {
         layout.setHorizontalGroup(
             layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addComponent(controlPanel, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-            .addComponent(jScrollPane1, javax.swing.GroupLayout.DEFAULT_SIZE, 357, Short.MAX_VALUE)
+            .addComponent(jScrollPane1, javax.swing.GroupLayout.DEFAULT_SIZE, 376, Short.MAX_VALUE)
         );
         layout.setVerticalGroup(
             layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
@@ -245,7 +245,7 @@ class IngestMessagePanel extends JPanel implements TableModelListener {
          * It is not possible to internationalize the list of options in a ComboBox
          * inside of the generated form code. So, it is done here.
          */
-        sortByComboBox.setModel(new javax.swing.DefaultComboBoxModel<String>(new String[] {
+        sortByComboBox.setModel(new DefaultComboBoxModel<>(new String[] {
             NbBundle.getMessage(this.getClass(), "IngestMessagePanel.sortByComboBox.model.time"), 
             NbBundle.getMessage(this.getClass(), "IngestMessagePanel.sortByComboBox.model.priority")}));
 
@@ -519,7 +519,7 @@ class IngestMessagePanel extends JPanel implements TableModelListener {
             if (moduleName != null && m.getMessageType() == IngestMessage.MessageType.DATA) {
                 //not a manager message, a data message, then group
                 if (!groupings.containsKey(moduleName)) {
-                    groupings.put(moduleName, new HashMap<String, List<IngestMessageGroup>>());
+                    groupings.put(moduleName, new HashMap<>());
                 }
                 final Map<String, List<IngestMessageGroup>> groups = groupings.get(moduleName);
                 //groups for this uniqueness
@@ -564,7 +564,7 @@ class IngestMessagePanel extends JPanel implements TableModelListener {
                             messageGroup = first;
                             //move to bottom of table
                             //remove from existing position
-                            int toRemove = 0;
+                            int toRemove;
                             while ((toRemove = getTableEntryIndex(uniqueness)) != -1) {
                                 messageData.remove(toRemove);
                                 //remove the row, will be added to the bottom

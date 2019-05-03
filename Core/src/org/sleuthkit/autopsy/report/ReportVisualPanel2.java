@@ -1,7 +1,7 @@
 /*
  * Autopsy Forensic Browser
  *
- * Copyright 2013-2014 Basis Technology Corp.
+ * Copyright 2013-2018 Basis Technology Corp.
  * Contact: carrier <at> sleuthkit <dot> org
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -41,16 +41,23 @@ import javax.swing.event.ListDataListener;
 import org.openide.util.NbBundle;
 import org.openide.windows.WindowManager;
 import org.sleuthkit.autopsy.casemodule.Case;
+import org.sleuthkit.autopsy.casemodule.NoCurrentCaseException;
+import org.sleuthkit.autopsy.casemodule.services.TagsManager;
 import org.sleuthkit.autopsy.coreutils.Logger;
 import org.sleuthkit.datamodel.BlackboardArtifact;
 import org.sleuthkit.datamodel.TagName;
 import org.sleuthkit.datamodel.TskCoreException;
+import org.sleuthkit.datamodel.TskData;
 
+/**
+ * Display data on which to allow reports module to report.
+ */
+@SuppressWarnings("PMD.SingularField") // UI widgets cause lots of false positives
 final class ReportVisualPanel2 extends JPanel {
 
-    private ReportWizardPanel2 wizPanel;
-    private Map<String, Boolean> tagStates = new LinkedHashMap<>();
-    private List<String> tags = new ArrayList<>();
+    private final ReportWizardPanel2 wizPanel;
+    private final Map<String, Boolean> tagStates = new LinkedHashMap<>();
+    private final List<String> tags = new ArrayList<>();
     ArtifactSelectionDialog dialog = new ArtifactSelectionDialog((JFrame) WindowManager.getDefault().getMainWindow(), true);
     private Map<BlackboardArtifact.Type, Boolean> artifactStates = new HashMap<>();
     private List<BlackboardArtifact.Type> artifacts = new ArrayList<>();
@@ -95,14 +102,15 @@ final class ReportVisualPanel2 extends JPanel {
     private void initTags() {
         List<TagName> tagNamesInUse;
         try {
-            tagNamesInUse = Case.getCurrentCase().getServices().getTagsManager().getTagNamesInUse();
-        } catch (TskCoreException ex) {
+            tagNamesInUse = Case.getCurrentCaseThrows().getServices().getTagsManager().getTagNamesInUse();
+        } catch (TskCoreException | NoCurrentCaseException ex) {
             Logger.getLogger(ReportVisualPanel2.class.getName()).log(Level.SEVERE, "Failed to get tag names", ex); //NON-NLS
             return;
         }
 
         for (TagName tagName : tagNamesInUse) {
-            tagStates.put(tagName.getDisplayName(), Boolean.FALSE);
+            String notableString = tagName.getKnownStatus() == TskData.FileKnown.BAD ? TagsManager.getNotableTagLabel() : "";
+            tagStates.put(tagName.getDisplayName() + notableString, Boolean.FALSE);
         }
         tags.addAll(tagStates.keySet());
 
@@ -116,7 +124,9 @@ final class ReportVisualPanel2 extends JPanel {
         tagsList.addMouseListener(new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent evt) {
-
+                if (!taggedResultsRadioButton.isSelected()) {
+                    return;
+                }
                 int index = tagsList.locationToIndex(evt.getPoint());
                 if (index < tagsModel.getSize() && index >= 0) {
                     String value = tagsModel.getElementAt(index);
@@ -133,6 +143,7 @@ final class ReportVisualPanel2 extends JPanel {
     private void initArtifactTypes() {
 
         try {
+            Case openCase = Case.getCurrentCaseThrows();
             ArrayList<BlackboardArtifact.Type> doNotReport = new ArrayList<>();
             doNotReport.add(new BlackboardArtifact.Type(BlackboardArtifact.ARTIFACT_TYPE.TSK_GEN_INFO.getTypeID(),
                     BlackboardArtifact.ARTIFACT_TYPE.TSK_GEN_INFO.getLabel(),
@@ -141,7 +152,7 @@ final class ReportVisualPanel2 extends JPanel {
                     BlackboardArtifact.ARTIFACT_TYPE.TSK_TOOL_OUTPUT.getLabel(),
                     BlackboardArtifact.ARTIFACT_TYPE.TSK_TOOL_OUTPUT.getDisplayName())); // output is too unstructured for table review
 
-            artifacts = Case.getCurrentCase().getSleuthkitCase().getArtifactTypesInUse();
+            artifacts = openCase.getSleuthkitCase().getArtifactTypesInUse();
 
             artifacts.removeAll(doNotReport);
 
@@ -149,7 +160,7 @@ final class ReportVisualPanel2 extends JPanel {
             for (BlackboardArtifact.Type type : artifacts) {
                 artifactStates.put(type, Boolean.TRUE);
             }
-        } catch (TskCoreException ex) {
+        } catch (TskCoreException | NoCurrentCaseException ex) {
             Logger.getLogger(ReportVisualPanel2.class.getName()).log(Level.SEVERE, "Error getting list of artifacts in use: " + ex.getLocalizedMessage(), ex); //NON-NLS
         }
     }
@@ -175,16 +186,26 @@ final class ReportVisualPanel2 extends JPanel {
         return tagStates;
     }
 
+    /**
+     * Are any tags selected?
+     *
+     * @return True if any tags are selected; otherwise false.
+     */
     private boolean areTagsSelected() {
         boolean result = false;
         for (Entry<String, Boolean> entry : tagStates.entrySet()) {
             if (entry.getValue()) {
                 result = true;
+                break;
             }
         }
         return result;
     }
 
+    /**
+     * Set the Finish button as either enabled or disabled depending on the UI
+     * component selections.
+     */
     private void updateFinishButton() {
         if (taggedResultsRadioButton.isSelected()) {
             wizPanel.setFinish(areTagsSelected());
@@ -198,6 +219,19 @@ final class ReportVisualPanel2 extends JPanel {
      */
     boolean isTaggedResultsRadioButtonSelected() {
         return taggedResultsRadioButton.isSelected();
+    }
+
+    /**
+     * Set all tagged results as either selected or unselected.
+     *
+     * @param selected Should all tagged results be selected?
+     */
+    void setAllTaggedResultsSelected(boolean selected) {
+        for (String tag : tags) {
+            tagStates.put(tag, (selected ? Boolean.TRUE : Boolean.FALSE));
+        }
+        tagsList.repaint();
+        wizPanel.setFinish(selected);
     }
 
     /**
@@ -225,6 +259,11 @@ final class ReportVisualPanel2 extends JPanel {
 
         optionsButtonGroup.add(allResultsRadioButton);
         org.openide.awt.Mnemonics.setLocalizedText(allResultsRadioButton, org.openide.util.NbBundle.getMessage(ReportVisualPanel2.class, "ReportVisualPanel2.allResultsRadioButton.text")); // NOI18N
+        allResultsRadioButton.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                allResultsRadioButtonActionPerformed(evt);
+            }
+        });
 
         org.openide.awt.Mnemonics.setLocalizedText(dataLabel, org.openide.util.NbBundle.getMessage(ReportVisualPanel2.class, "ReportVisualPanel2.dataLabel.text")); // NOI18N
 
@@ -265,7 +304,7 @@ final class ReportVisualPanel2 extends JPanel {
                         .addComponent(tagsScrollPane)
                         .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
                         .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING, false)
-                            .addComponent(advancedButton, javax.swing.GroupLayout.Alignment.TRAILING, javax.swing.GroupLayout.DEFAULT_SIZE, 89, Short.MAX_VALUE)
+                            .addComponent(advancedButton, javax.swing.GroupLayout.Alignment.TRAILING, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
                             .addComponent(deselectAllButton, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
                             .addComponent(selectAllButton, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)))
                     .addGroup(layout.createSequentialGroup()
@@ -273,9 +312,12 @@ final class ReportVisualPanel2 extends JPanel {
                             .addComponent(taggedResultsRadioButton)
                             .addComponent(dataLabel)
                             .addComponent(allResultsRadioButton))
-                        .addGap(0, 481, Short.MAX_VALUE)))
+                        .addGap(0, 0, Short.MAX_VALUE)))
                 .addContainerGap())
         );
+
+        layout.linkSize(javax.swing.SwingConstants.HORIZONTAL, new java.awt.Component[] {advancedButton, deselectAllButton, selectAllButton});
+
         layout.setVerticalGroup(
             layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(layout.createSequentialGroup()
@@ -300,24 +342,20 @@ final class ReportVisualPanel2 extends JPanel {
     }// </editor-fold>//GEN-END:initComponents
 
     private void selectAllButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_selectAllButtonActionPerformed
-        for (String tag : tags) {
-            tagStates.put(tag, Boolean.TRUE);
-        }
-        tagsList.repaint();
-        wizPanel.setFinish(true);
+        setAllTaggedResultsSelected(true);
     }//GEN-LAST:event_selectAllButtonActionPerformed
 
     private void deselectAllButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_deselectAllButtonActionPerformed
-        for (String tag : tags) {
-            tagStates.put(tag, Boolean.FALSE);
-        }
-        tagsList.repaint();
-        wizPanel.setFinish(false);
+        setAllTaggedResultsSelected(false);
     }//GEN-LAST:event_deselectAllButtonActionPerformed
 
     private void advancedButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_advancedButtonActionPerformed
         artifactStates = dialog.display();
     }//GEN-LAST:event_advancedButtonActionPerformed
+
+    private void allResultsRadioButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_allResultsRadioButtonActionPerformed
+        setAllTaggedResultsSelected(false);
+    }//GEN-LAST:event_allResultsRadioButtonActionPerformed
 
     // Variables declaration - do not modify//GEN-BEGIN:variables
     private javax.swing.JButton advancedButton;
@@ -359,11 +397,11 @@ final class ReportVisualPanel2 extends JPanel {
         public Component getListCellRendererComponent(JList<? extends String> list, String value, int index, boolean isSelected, boolean cellHasFocus) {
             if (value != null) {
                 setEnabled(list.isEnabled());
-                setSelected(tagStates.get(value.toString()));
+                setSelected(tagStates.get(value));
                 setFont(list.getFont());
                 setBackground(list.getBackground());
                 setForeground(list.getForeground());
-                setText(value.toString());
+                setText(value);
                 return this;
             }
             return new JLabel();

@@ -2,7 +2,7 @@
  *
  * Autopsy Forensic Browser
  * 
- * Copyright 2013-2015 Basis Technology Corp.
+ * Copyright 2013-2018 Basis Technology Corp.
  * 
  * Copyright 2012 42six Solutions.
  * Contact: aebadirad <at> 42six <dot> com
@@ -26,11 +26,14 @@ import java.awt.Component;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.beans.PropertyChangeEvent;
+import java.io.IOException;
 import java.text.MessageFormat;
+import java.util.EnumSet;
 import java.util.Map;
 import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import org.openide.DialogDisplayer;
+import org.openide.NotifyDescriptor;
 import org.openide.WizardDescriptor;
 import org.openide.awt.ActionID;
 import org.openide.awt.ActionReference;
@@ -47,8 +50,8 @@ import org.sleuthkit.datamodel.BlackboardArtifact;
 @ActionID(category = "Tools", id = "org.sleuthkit.autopsy.report.ReportWizardAction")
 @ActionRegistration(displayName = "#CTL_ReportWizardAction", lazy = false)
 @ActionReferences(value = {
-    @ActionReference(path = "Menu/Tools", position = 103),
-    @ActionReference(path = "Toolbars/Case", position = 103)})
+    @ActionReference(path = "Menu/Tools", position = 301, separatorAfter = 399),
+    @ActionReference(path = "Toolbars/Case", position = 105)})
 public final class ReportWizardAction extends CallableSystemAction implements Presenter.Toolbar, ActionListener {
 
     private final JButton toolbarButton = new JButton();
@@ -69,22 +72,30 @@ public final class ReportWizardAction extends CallableSystemAction implements Pr
             TableReportModule tableReport = (TableReportModule) wiz.getProperty("tableModule");
             GeneralReportModule generalReport = (GeneralReportModule) wiz.getProperty("generalModule");
             FileReportModule fileReport = (FileReportModule) wiz.getProperty("fileModule");
-            if (tableReport != null) {
-                generator.generateTableReport(tableReport, (Map<BlackboardArtifact.Type, Boolean>) wiz.getProperty("artifactStates"), (Map<String, Boolean>) wiz.getProperty("tagStates")); //NON-NLS
-            } else if (generalReport != null) {
-                generator.generateGeneralReport(generalReport);
-            } else if (fileReport != null) {
-                generator.generateFileListReport(fileReport, (Map<FileReportDataTypes, Boolean>) wiz.getProperty("fileReportOptions")); //NON-NLS
+            PortableCaseReportModule portableCaseReport = (PortableCaseReportModule) wiz.getProperty("portableCaseModule");  // NON-NLS
+            try {
+                if (tableReport != null) {
+                    generator.generateTableReport(tableReport, (Map<BlackboardArtifact.Type, Boolean>) wiz.getProperty("artifactStates"), (Map<String, Boolean>) wiz.getProperty("tagStates")); //NON-NLS
+                } else if (generalReport != null) {
+                    generator.generateGeneralReport(generalReport);
+                } else if (fileReport != null) {
+                    generator.generateFileListReport(fileReport, (Map<FileReportDataTypes, Boolean>) wiz.getProperty("fileReportOptions")); //NON-NLS
+                } else if (portableCaseReport != null) {
+                    generator.generatePortableCaseReport(portableCaseReport, (PortableCaseReportModule.PortableCaseOptions) wiz.getProperty("portableCaseReportOptions"));
+                }
+            } catch (IOException e) {
+                NotifyDescriptor descriptor = new NotifyDescriptor.Message(e.getMessage(), NotifyDescriptor.ERROR_MESSAGE);
+                DialogDisplayer.getDefault().notify(descriptor);
             }
         }
     }
 
     public ReportWizardAction() {
         setEnabled(false);
-        Case.addPropertyChangeListener((PropertyChangeEvent evt) -> {
+        Case.addEventTypeSubscriber(EnumSet.of(Case.Events.CURRENT_CASE), (PropertyChangeEvent evt) -> {
             if (evt.getPropertyName().equals(Case.Events.CURRENT_CASE.toString())) {
                 Case newCase = (Case) evt.getNewValue();
-                setEnabled(newCase != null && RuntimeProperties.coreComponentsAreActive());
+                setEnabled(newCase != null && RuntimeProperties.runningWithGUI());
             }
         });
 

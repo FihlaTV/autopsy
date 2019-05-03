@@ -1,3 +1,270 @@
+---------------- VERSION 4.11.0  --------------
+New Features:
+
+Adding Data: 
+- Hashes can optionally be entered when adding a disk image data source to a case.
+- Acquisition details can be stored when the data source is added. 
+
+
+Ingest Modules:
+- Added support for Microsoft Edge browser (cookies, history, and bookmarks)
+- Added support for Safari web browser (downloads, cookies, history, and bookmarks)
+- Expanded Chrome browser support to include cache parsing and form/auto fill. 
+- Expanded Firefox browser support to extract form/auto fill fields.
+- Parse Zone.Identifier files to identify the source of files.
+- Added a TSK_SOURCE artifact to downloaded files to  help users trace back to where it came from. 
+- Added support for parsing vCards (virtual cards).
+- Extract more information about Windows user accounts (number of logins, creation date, and last login)
+- Detect more operating system types, which get saved as a TSK_OS_INFO artifact. 
+- Detect Android media cards, which gets saved as a TSK_DATA_SOURCE_USAGE artifact. 
+
+
+UI:
+- The Application content viewer now displays HTML files.
+- Video playback now uses gstreamer on 64-bit systems, which supports more video formats.
+- Pictures can be rotated and zoomed in the Application content viewer.
+- The Other Occurrences content viewer layout was reorganized to make viewing the data easier.
+- New "Data Source Summary" panel shows high-level statistics and details about the data sources in the case. 
+- Data sources are now listed in the data sources tree in alphabetical order.
+- The presentation of finding common properties within a case was revised to group results in a more helpful way.
+
+
+Report / Export: 
+- Portable Cases can be created based on tagged data.  These cases contain a subset of the case data and can be opened anywhere. 
+- Users can now choose tabs or commas as the delimiter for a files report.
+- Case notes are included in the HTML report.
+
+
+Other:
+- Added a new file type that allows module writers to specify a file based on its byte range. 
+- Data sources can be analyzed and have a CASE/UCO report generated using only the command line. 
+
+
+Bug Fixes:
+- Decreased the time required to execute inter-case common properties searches of the Central Repository.
+- Assorted small bug fixes are included.
+
+
+---------------- VERSION 4.10.0  --------------
+New Features:
+- Users can now view information on all cases/data sources in the Central 
+Repository.
+- SSID, MAC address, IMEI, IMSI, and ICCID properties can now be added to the 
+Central Repository by the Correlation Engine ingest module. 
+- The Correlation Engine ingest module can be configured to flag any occurrences 
+of SSID, MAC address, IMEI, IMSI, and ICCID properties that have been previously 
+added to the Central Repository.
+- File type filtering for common properties search is now supported.
+- Common properties search results can now be viewed by case and data source 
+within the case.
+- Users can now search the Central Repository for property instances with a 
+given value.
+- OCR text extraction for keyword search now supports languages other than 
+English, if language packs are installed.
+- Added the ability for examiners to select the time zone for displaying dates.
+- Custom headers and footers can now be added to HTML reports.
+- Added ability to either enter or generate hashes of image data sources.
+- Data sources that fail hash verification are now flagged with interesting 
+item artifacts by the Data Source Integrity ingest module (formerly known as the 
+E01 Verifier ingest module).
+- Added a report module to export data in CASE/UCO format.
+- Ingest filters and interesting file sets can now be defined with multiple 
+extensions included in a single condition/rule.
+
+Bug Fixes:
+- The Images/Videos Gallery now works for multi-user cases.
+- Duplicate interesting item and EXIF metadata artifacts are no longer created 
+when you run the modules that generate them more than once.
+- The Application content viewer now displays SQLite table column names even 
+when the table is empty.
+- Assorted small bug fixes are included.
+
+
+---------------- VERSION 4.9.1  --------------
+Bug Fixes:
+- Fixed possible ingest deadlock from Image Gallery database inserts.
+- Image Gallery does not need lock on Case DB during pre-population, which makes UI more responsive.
+- Other misc Image Gallery fixes.
+
+
+---------------- VERSION 4.9.0  --------------
+New Features:
+- Removed data from table that are time intensive and can be found in content viewers (such as hash set hits)
+- Added ability to find common items (files, emails, etc.) between current case and past cases using the Central Repository. 
+- Added ability to ignore common items that exist in a large number of cases by using Central Repository data. 
+- Data is validated and normalized before being entered into the Central Repository.
+- Allow users to specify that an ad-hoc keyword search should not be saved to database
+- New “Annotations” content viewer that shows all tags and comments associated with an item
+- Added 2 icons to the table to show the item’s score (if it is notable or suspicious) and if it has a comment. 
+- Added column to the table to show previous number of occurrences. 
+- Tags are now associated with the user (in a multi-user environment) and you can hide other people’s tags
+- New Display options area that unifies various new settings. 
+- Hash sets can be copied into the user’s config folder (AppData), which makes it easier to run Autopsy from a Live Triage USB and not care about what drive letter it gets.
+- Image Gallery stores its groups and seen status in Case DB instead of its own. 
+- Image Gallery works better in multi-user setups and reloads the database when other nodes add data sources.
+- Image Gallery saves which user saw a group and gives user option of seeing only their unseen groups or all unseen groups. 
+- Saves last export location and pre-populates that in the file picker
+- Provide feedback about why some right click options are disabled (ingest is running, not file content, etc.)
+
+Bug Fixes:
+- Substring keyword search is more accurate (now uses regular expression)
+- New text extractor for SQLite that better deals with full text search tables
+- Better deal with Unicode text files that do not have Byte Order Marker
+- Embedded file extractor module is now faster because it uses a different 7ZIP API.
+- Fixed various HTML report bugs
+- Duplicate hash set hits are not created when you run the Hash Ingest Module twice. 
+- Auto ingest (in Experimental) scan times of input folders is faster.
+
+
+---------------- VERSION 4.8.0  --------------
+New Features:
+- Data Source Grouping:
+-- The case tree view can now be grouped by data source.
+-- Keyword and file search can now be restricted to a data source.
+- Central Repository / Correlation:
+-- New common files search feature that finds files that exist in multiple devices in the same case. 
+-- The Other Occurrences content viewer now shows matches in the current case (in addition to central repository).
+-- Central repository options panel now shows cases that are in repo.
+- A comment about a file can be created and saved in the central repository so that future cases and see it. 
+- Keyword Search:
+-- Can enable OCR text extraction of PDF and JPG files using Tesseract. 
+-- Keyword search module normalizes Unicode text. 
+-- Keyword search module uses ICU to convert text files that do not have a BOM.
+- Tagging: 
+-- Tagging menu changed to have user defined tags at top and "quick tag" removed one level of menus.
+-- New "Replace Tag" feature to change the tag on an item.
+- Other:
+-- SQLite tables can be now be exported to CSV files.
+-- An interesting file artifact is now created when a "zip bomb" is detected.
+-- An object detection ingest module was added to the Experimental module. It requires an OpenCV trained model. 
+
+Bug Fixes:
+- Expanding the case tree is more efficient.
+- Improved "zip bomb" detection.
+- Assorted small bug fixes are included.
+
+
+---------------- VERSION 4.7.0  --------------
+New Features: 
+- A graph visualization was added to the Communications tool to make it easier to find messages and relationships.
+- A new "Application" content viewer (lower right) that will contain file-type specific viewers (to reduce number of tabs).
+- New viewer for SQLite databases (in Application content viewer)
+- New viewer for binary PLists (in Application content viewer)
+- L01 files can be imported as data sources.
+- Ingest filters can now use date range conditions for triage. 
+- Passwords to open password protected archive files can be entered (by right clicking on the file).
+- Reports (e.g., RegRipper output) generated by ingest modules are now indexed for keyword search.
+- PhotoRec carving module can be configured to keep corrupted files.
+- Sector size can be specified for local drives and images when E01 is wrong or it is a raw image. 
+- New data source processor in Experimental module that runs Volatility, adds the outputs as files, and parses the reports to provide INTERESTING_FILE artifacts.
+- Assorted small enhancements are included.
+
+Bug Fixes:
+- Memory leaks and other issues revealed by fuzzing the The Sleuth Kit have 
+been fixed.
+- Result views (upper right) and content views (lower right) stay in synch when switching result views.
+- Concurrency bugs in the ingest tasks scheduler have been fixed.
+- Assorted small bug fixes are included.
+
+
+---------------- VERSION 4.6.0  --------------
+New Features: 
+- A new Message content viewer was added to make it easier to view email message contents. 
+- A new Communications interface was added to make it easier to find messages and relationships. 
+- Hash sets can be centrally stored and shared in the Central Repository. 
+- New Encryption Detection module that will flag possibly encrypted files.
+- Can more easily run Autopsy from a USB drive and leave few traces on target system.
+- Tag definitions now have a "notable" property.  The Central Repository uses this to mark files as notable. 
+- Large slack files are now file typed. 
+- The maximum number of Solr connections and ingest threads have increased. 
+- Periodic keyword search will dynamically change based on how long queries are taking. 
+- Users can change the amount of memory allocated to the application. 
+- The amount of memory required for processing keyword hits has been reduced.
+- Layout of HTML reports has been modified make it easier to open. 
+- "Databases" was added to File Type by Extension view. 
+- Users can now enter more information about cases including examiner, organization, etc.
+- New dialog to open multi-user cases that allows for searching. 
+- Auto ingest metrics are collected and displayed in dashboard.
+- Auto ingest module that extracts disk images from archive files. 
+- Keyword search has been made more responsive to both search and ingest job cancellation.
+- Number of log files to keep before rollover is now configurable. 
+- Preliminary changes to make Linux and OS X builds easier. 
+
+Bug Fixes:
+- Memory leaks and other issues revealed by fuzzing the SleuthKit have 
+been fixed.
+- Memory issues caused by Tika are fixed (by upgrading to 1.17)
+- Assorted small enhancements and bug fixes are included.
+
+
+---------------- VERSION 4.5.0  --------------
+- Memory usage has been reduced to improve support for very large cases.
+- The central repository and correlation engine introduced in version 4.4.1 have 
+been moved to Core Autopsy, so they are available without doing a plugin 
+installation. This optional feature includes a database (SQLite or PostgreSQL) 
+and logic for correlating artifacts across cases. Results are displayed using an 
+Interesting Artifacts branch of the Interesting Items tree and an 
+Other Occurrences content viewer.
+- Message results with attachments can now be seen be seen by browsing to the 
+source file in the Data Sources tree, which will display the messages in the 
+results view to the right. Any messages with attachments will be shown under 
+the source file in the tree, and the attachments can be seen in the result view 
+by selecting the message.
+- Volume nodes in the tree view and results view now have a context menu item 
+that displays a file system properties dialog.
+- Nodes in the tree view now have the same context menu items as nodes in the 
+results view.
+- Virtual directory nodes in the tree view are distinguished in the Data Sources 
+tree by the addition of a "V" to their icon.
+- Credit card number search has added logic to reduce false positives.
+- A new version of the automated ingest dashboard has been added to allow 
+insight into pending, running and completed automated ingest jobs in automated 
+ingest Examiner mode.
+- All occurrences of "Known Bad" in the user interface have been changed to 
+"Notable."  
+- Assorted small enhancements and bug fixes are included.
+
+---------------- VERSION 4.4.1  --------------
+- A new central repository feature has been added to the optional 
+CentralRepository plug-in (NetBeans module); this optional feature includes a 
+database (SQLite or PostgreSQL) and logic for correlating artifacts across 
+cases; results are displayed using an Interesting Artifacts branch of the 
+Interesting Items tree and an Other Data Sources content viewer. 
+- Case deletion is now done using a Case menu item and both single-user and 
+general (not auto ingest) multi-user cases can be deleted.
+- Results viewer (top right area of desktop application) sorts are persistent 
+and can be applied to either the table viewer or the thumbnail viewer. 
+- Content viewers (bottom right area of desktop application) now resize 
+correctly.
+- The View Source File in Directory context menu item now works correctly.
+- Tagged image files in the HTML report are now displayed full-size.
+- Some general UI responsiveness issues have been addressed. 
+- Some potential deadlocks during ingest have been eliminated.
+- Assorted small enhancements and bug fixes are included.
+
+---------------- VERSION 4.4.0  --------------
+Improvements:
+- Keyword search supports regular expressions that include spaces.
+- Improvements to keyword search highlighting and standard regular expressions.
+- User can edit keyword lists.
+- Simultaneous acquisition of a sparse VHD from a USB device during analysis. 
+- Support for ingest profiles that combine file ingest filters with ingest 
+module settings.
+- Artifact attributes can be marked to indicate discovery by multiple tools.
+- Import/export of interesting files set membership rules.
+- High DPI display support added.
+- Support for application service plug-in modules (Java only).
+- Progress dialogs for case create/open/close/delete operations that support 
+cancellation of create/open operations and cancellation of the opening of case 
+resources by individual application services. 
+- Coordination service now used for all multi-user cases, not just auto 
+ingest cases; e.g., any open multi-user case cannot be deleted by another user.
+- Updated Recent Activity ingest module to use RegRipper 2.8 plugins. 
+- Updated version of Tika used for extracting text.
+- Updated version of POI used for extracting embedded MS Office documents.
+- Ability to customize HTML report logo.
+- Assorted small enhancements and bug fixes.
+
 ---------------- VERSION 4.3.0  --------------
 Improvements:
 - Support for slack space on files (as separate virtual files) to enable keyword searching and other analysis. 

@@ -1,7 +1,7 @@
 /*
  * Autopsy Forensic Browser
  *
- * Copyright 2014-16 Basis Technology Corp.
+ * Copyright 2014-2018 Basis Technology Corp.
  * Contact: carrier <at> sleuthkit <dot> org
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -45,7 +45,9 @@ import org.controlsfx.validation.ValidationResult;
 import org.controlsfx.validation.ValidationSupport;
 import org.controlsfx.validation.Validator;
 import org.openide.util.NbBundle;
+import org.openide.windows.WindowManager;
 import org.sleuthkit.autopsy.casemodule.Case;
+import org.sleuthkit.autopsy.casemodule.NoCurrentCaseException;
 import org.sleuthkit.autopsy.coreutils.FileUtil;
 import org.sleuthkit.autopsy.coreutils.Logger;
 import org.sleuthkit.autopsy.timeline.PromptDialogManager;
@@ -64,7 +66,6 @@ public class SaveSnapshotAsReport extends Action {
     private static final ButtonType OPEN = new ButtonType(Bundle.OpenReportAction_DisplayName(), ButtonBar.ButtonData.NO);
     private static final ButtonType OK = new ButtonType(ButtonType.OK.getText(), ButtonBar.ButtonData.CANCEL_CLOSE);
 
-    private final TimeLineController controller;
     private final Case currentCase;
 
     /**
@@ -94,13 +95,12 @@ public class SaveSnapshotAsReport extends Action {
         setLongText(Bundle.SaveSnapShotAsReport_action_longText());
         setGraphic(new ImageView(SNAP_SHOT));
 
-        this.controller = controller;
         this.currentCase = controller.getAutopsyCase();
 
         setEventHandler(actionEvent -> {
             //capture generation date and use to make default report name
             Date generationDate = new Date();
-            final String defaultReportName = FileUtil.escapeFileName(currentCase.getName() + " " + new SimpleDateFormat("MM-dd-yyyy-HH-mm-ss").format(generationDate)); //NON_NLS
+            final String defaultReportName = FileUtil.escapeFileName(currentCase.getDisplayName() + " " + new SimpleDateFormat("MM-dd-yyyy-HH-mm-ss").format(generationDate)); //NON_NLS
             BufferedImage snapshot = SwingFXUtils.fromFXImage(nodeSupplier.get().snapshot(null, null), null);
 
             //prompt user to pick report name
@@ -151,12 +151,12 @@ public class SaveSnapshotAsReport extends Action {
 
                 try {
                     //add main file as report to case
-                    Case.getCurrentCase().addReport(reportMainFilePath.toString(), Bundle.Timeline_ModuleName(), reportName);
-                } catch (TskCoreException ex) {
+                    Case.getCurrentCaseThrows().addReport(reportMainFilePath.toString(), Bundle.Timeline_ModuleName(), reportName);
+                } catch (TskCoreException | NoCurrentCaseException ex) {
                     LOGGER.log(Level.WARNING, "Failed to add " + reportMainFilePath.toString() + " to case as a report", ex); //NON_NLS
                     new Alert(Alert.AlertType.ERROR, Bundle.SaveSnapShotAsReport_FailedToAddReport()).show();
                     return;
-                }
+                } 
 
                 //notify user of report location
                 final Alert alert = new Alert(Alert.AlertType.INFORMATION, null, OPEN, OK);
@@ -192,22 +192,22 @@ public class SaveSnapshotAsReport extends Action {
                 try {
                     Desktop.getDesktop().open(reportHTMLFIle.toFile());
                 } catch (IOException ex) {
-                    JOptionPane.showMessageDialog(null,
+                    JOptionPane.showMessageDialog(WindowManager.getDefault().getMainWindow(),
                             Bundle.OpenReportAction_NoAssociatedEditorMessage(),
                             Bundle.OpenReportAction_MessageBoxTitle(),
                             JOptionPane.ERROR_MESSAGE);
                 } catch (UnsupportedOperationException ex) {
-                    JOptionPane.showMessageDialog(null,
+                    JOptionPane.showMessageDialog(WindowManager.getDefault().getMainWindow(),
                             Bundle.OpenReportAction_NoOpenInEditorSupportMessage(),
                             Bundle.OpenReportAction_MessageBoxTitle(),
                             JOptionPane.ERROR_MESSAGE);
                 } catch (IllegalArgumentException ex) {
-                    JOptionPane.showMessageDialog(null,
+                    JOptionPane.showMessageDialog(WindowManager.getDefault().getMainWindow(),
                             Bundle.OpenReportAction_MissingReportFileMessage(),
                             Bundle.OpenReportAction_MessageBoxTitle(),
                             JOptionPane.ERROR_MESSAGE);
                 } catch (SecurityException ex) {
-                    JOptionPane.showMessageDialog(null,
+                    JOptionPane.showMessageDialog(WindowManager.getDefault().getMainWindow(),
                             Bundle.OpenReportAction_ReportFileOpenPermissionDeniedMessage(),
                             Bundle.OpenReportAction_MessageBoxTitle(),
                             JOptionPane.ERROR_MESSAGE);

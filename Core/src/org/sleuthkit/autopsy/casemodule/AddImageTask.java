@@ -1,7 +1,7 @@
 /*
  * Autopsy Forensic Browser
  *
- * Copyright 2013-2016 Basis Technology Corp.
+ * Copyright 2013-2018 Basis Technology Corp.
  * Contact: carrier <at> sleuthkit <dot> org
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,11 +21,15 @@ package org.sleuthkit.autopsy.casemodule;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Level;
+import javax.annotation.concurrent.GuardedBy;
+import org.apache.commons.lang3.StringUtils;
 import org.openide.util.NbBundle;
 import org.sleuthkit.autopsy.corecomponentinterfaces.DataSourceProcessorCallback;
 import org.sleuthkit.autopsy.corecomponentinterfaces.DataSourceProcessorCallback.DataSourceProcessorResult;
 import org.sleuthkit.autopsy.corecomponentinterfaces.DataSourceProcessorProgressMonitor;
 import org.sleuthkit.autopsy.coreutils.Logger;
+import org.sleuthkit.autopsy.imagewriter.ImageWriterService;
+import org.sleuthkit.autopsy.imagewriter.ImageWriterSettings;
 import org.sleuthkit.datamodel.Content;
 import org.sleuthkit.datamodel.Image;
 import org.sleuthkit.datamodel.SleuthkitJNI;
@@ -40,8 +44,13 @@ class AddImageTask implements Runnable {
     private final Logger logger = Logger.getLogger(AddImageTask.class.getName());
     private final String deviceId;
     private final String imagePath;
+    private final int sectorSize;
     private final String timeZone;
+    private final ImageWriterSettings imageWriterSettings;
     private final boolean ignoreFatOrphanFiles;
+    private final String md5;
+    private final String sha1;
+    private final String sha256;
     private final DataSourceProcessorProgressMonitor progressMonitor;
     private final DataSourceProcessorCallback callback;
     private boolean criticalErrorOccurred;
@@ -58,6 +67,7 @@ class AddImageTask implements Runnable {
      * TODO (AUT-2021): Merge SleuthkitJNI.AddImageProcess and AddImageTask
      */
     private final Object tskAddImageProcessLock;
+    @GuardedBy("tskAddImageProcessLock")
     private boolean tskAddImageProcessStopped;
     private SleuthkitJNI.CaseDbHandle.AddImageProcess tskAddImageProcess;
 
@@ -69,20 +79,33 @@ class AddImageTask implements Runnable {
      *                             intended to be unique across multiple cases
      *                             (e.g., a UUID).
      * @param imagePath            Path to the image file.
+     * @param sectorSize           The sector size (use '0' for autodetect).
      * @param timeZone             The time zone to use when processing dates
      *                             and times for the image, obtained from
      *                             java.util.TimeZone.getID.
      * @param ignoreFatOrphanFiles Whether to parse orphans if the image has a
      *                             FAT filesystem.
+     * @param md5                  The MD5 hash of the image, may be null.
+     * @param sha1                 The SHA-1 hash of the image, may be null.
+     * @param sha256               The SHA-256 hash of the image, may be null.
+     * @param imageWriterPath      Path that a copy of the image should be
+     *                             written to. Use empty string to disable image
+     *                             writing
      * @param progressMonitor      Progress monitor to report progress during
      *                             processing.
      * @param callback             Callback to call when processing is done.
      */
-    AddImageTask(String deviceId, String imagePath, String timeZone, boolean ignoreFatOrphanFiles, DataSourceProcessorProgressMonitor progressMonitor, DataSourceProcessorCallback callback) {
+    AddImageTask(String deviceId, String imagePath, int sectorSize, String timeZone, boolean ignoreFatOrphanFiles, String md5, String sha1, String sha256, ImageWriterSettings imageWriterSettings,
+            DataSourceProcessorProgressMonitor progressMonitor, DataSourceProcessorCallback callback) {
         this.deviceId = deviceId;
         this.imagePath = imagePath;
+        this.sectorSize = sectorSize;
         this.timeZone = timeZone;
         this.ignoreFatOrphanFiles = ignoreFatOrphanFiles;
+        this.md5 = md5;
+        this.sha1 = sha1;
+        this.sha256 = sha256;
+        this.imageWriterSettings = imageWriterSettings;
         this.callback = callback;
         this.progressMonitor = progressMonitor;
         tskAddImageProcessLock = new Object();
@@ -93,26 +116,38 @@ class AddImageTask implements Runnable {
      */
     @Override
     public void run() {
+        Case currentCase;
+        try {
+            currentCase = Case.getCurrentCaseThrows();
+        } catch (NoCurrentCaseException ex) {
+            logger.log(Level.SEVERE, String.format("Failed to add image data source at %s, no current case", imagePath), ex);
+            return;
+        }
         progressMonitor.setIndeterminate(true);
         progressMonitor.setProgress(0);
-        Case currentCase = Case.getCurrentCase();
+        String imageWriterPath = "";
+        if (imageWriterSettings != null) {
+            imageWriterPath = imageWriterSettings.getPath();
+        }
         List<String> errorMessages = new ArrayList<>();
         List<Content> newDataSources = new ArrayList<>();
         try {
-            currentCase.getSleuthkitCase().acquireExclusiveLock();
+            currentCase.getSleuthkitCase().acquireSingleUserCaseWriteLock();
             synchronized (tskAddImageProcessLock) {
-                tskAddImageProcess = currentCase.getSleuthkitCase().makeAddImageProcess(timeZone, true, ignoreFatOrphanFiles);
+                if (!tskAddImageProcessStopped) {
+                    tskAddImageProcess = currentCase.getSleuthkitCase().makeAddImageProcess(timeZone, true, ignoreFatOrphanFiles, imageWriterPath);
+                } else {
+                    return;
+                }
             }
             Thread progressUpdateThread = new Thread(new ProgressUpdater(progressMonitor, tskAddImageProcess));
             progressUpdateThread.start();
             runAddImageProcess(errorMessages);
-            if (null != progressUpdateThread) {
-                progressUpdateThread.interrupt();
-            }
+            progressUpdateThread.interrupt();
             commitOrRevertAddImageProcess(currentCase, errorMessages, newDataSources);
             progressMonitor.setProgress(100);
         } finally {
-            currentCase.getSleuthkitCase().releaseExclusiveLock();
+            currentCase.getSleuthkitCase().releaseSingleUserCaseWriteLock();
             DataSourceProcessorCallback.DataSourceProcessorResult result;
             if (criticalErrorOccurred) {
                 result = DataSourceProcessorResult.CRITICAL_ERRORS;
@@ -130,6 +165,7 @@ class AddImageTask implements Runnable {
      */
     public void cancelTask() {
         synchronized (tskAddImageProcessLock) {
+            tskAddImageProcessStopped = true;
             if (null != tskAddImageProcess) {
                 try {
                     /*
@@ -141,7 +177,7 @@ class AddImageTask implements Runnable {
                      * called.
                      */
                     tskAddImageProcess.stop();
-                    tskAddImageProcessStopped = true;
+
                 } catch (TskCoreException ex) {
                     logger.log(Level.SEVERE, String.format("Error cancelling adding image %s to the case database", imagePath), ex); //NON-NLS
                 }
@@ -157,7 +193,7 @@ class AddImageTask implements Runnable {
      */
     private void runAddImageProcess(List<String> errorMessages) {
         try {
-            tskAddImageProcess.run(deviceId, new String[]{imagePath});
+            tskAddImageProcess.run(deviceId, new String[]{imagePath}, sectorSize);
         } catch (TskCoreException ex) {
             logger.log(Level.SEVERE, String.format("Critical error occurred adding image %s", imagePath), ex); //NON-NLS
             criticalErrorOccurred = true;
@@ -188,7 +224,7 @@ class AddImageTask implements Runnable {
                 try {
                     tskAddImageProcess.revert();
                 } catch (TskCoreException ex) {
-                    logger.log(Level.SEVERE, String.format("Error reverting adding image %s to the case database", imagePath), ex); //NON-NLS
+                    logger.log(Level.SEVERE, String.format("Error reverting after adding image %s to the case database", imagePath), ex); //NON-NLS
                     errorMessages.add(ex.getMessage());
                     criticalErrorOccurred = true;
                 }
@@ -201,10 +237,58 @@ class AddImageTask implements Runnable {
                         if (!verificationError.isEmpty()) {
                             errorMessages.add(verificationError);
                         }
+                        if (imageWriterSettings != null) {
+                            ImageWriterService.createImageWriter(imageId, imageWriterSettings);
+                        }
                         newDataSources.add(newImage);
+                        if (!StringUtils.isBlank(md5)) {
+                            try {
+                                newImage.setMD5(md5);
+                            } catch (TskCoreException ex) {
+                                logger.log(Level.SEVERE, String.format("Failed to add MD5 hash for image data source %s (objId=%d)", newImage.getName(), newImage.getId()), ex);
+                                errorMessages.add(ex.getMessage());
+                                criticalErrorOccurred = true;
+                            } catch (TskDataException ignored) {
+                                /*
+                                 * The only reasonable way for this to happen at
+                                 * present is through C/C++ processing of an EWF
+                                 * image, which is not an error.
+                                 */
+                            }
+                        }
+                        if (!StringUtils.isBlank(sha1)) {
+                            try {
+                                newImage.setSha1(sha1);
+                            } catch (TskCoreException ex) {
+                                logger.log(Level.SEVERE, String.format("Failed to add SHA1 hash for image data source %s (objId=%d)", newImage.getName(), newImage.getId()), ex);
+                                errorMessages.add(ex.getMessage());
+                                criticalErrorOccurred = true;
+                            } catch (TskDataException ignored) {
+                                /*
+                                 * The only reasonable way for this to happen at
+                                 * present is through C/C++ processing of an EWF
+                                 * image, which is not an error.
+                                 */
+                            }
+                        }
+                        if (!StringUtils.isBlank(sha256)) {
+                            try {
+                                newImage.setSha256(sha256);
+                            } catch (TskCoreException ex) {
+                                logger.log(Level.SEVERE, String.format("Failed to add SHA256 for image data source %s (objId=%d)", newImage.getName(), newImage.getId()), ex);
+                                errorMessages.add(ex.getMessage());
+                                criticalErrorOccurred = true;
+                            } catch (TskDataException ignored) {
+                                /*
+                                 * The only reasonable way for this to happen at
+                                 * present is through C/C++ processing of an EWF
+                                 * image, which is not an error.
+                                 */
+                            }
+                        }
                     } else {
-                        String errorMessage = String.format("Error commiting adding image %s to the case database, no object id returned", imagePath); //NON-NLS
-                        logger.log(Level.SEVERE, errorMessage); 
+                        String errorMessage = String.format("Error commiting after adding image %s to the case database, no object id returned", imagePath); //NON-NLS
+                        logger.log(Level.SEVERE, errorMessage);
                         errorMessages.add(errorMessage);
                         criticalErrorOccurred = true;
                     }

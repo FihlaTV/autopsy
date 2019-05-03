@@ -1,7 +1,7 @@
 /*
  * Autopsy Forensic Browser
  *
- * Copyright 2015 Basis Technology Corp.
+ * Copyright 2011-2017 Basis Technology Corp.
  * Contact: carrier <at> sleuthkit <dot> org
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,15 +19,18 @@
 package org.sleuthkit.autopsy.coordinationservice;
 
 /**
- * Namespace elements for auto ingest coordination service nodes.
+ * An interface that allows the root node of the coordination service namespace
+ * for the application to be specified at runtime. An application built on the
+ * Autopsy platform should provide at most one implementation of this interface
+ * (additional implementations are ignored).
  */
-public final class CoordinationServiceNamespace {
-    private static final String ROOT = "autopsy";
+public interface CoordinationServiceNamespace {
 
-    public static String getRoot() {
-        return ROOT;
-    }
+    /**
+     * Gets the name of the root node of the coordination service namespace.
+     *
+     * @return The name of the root node.
+     */
+    public String getNamespaceRoot();
 
-    private CoordinationServiceNamespace() {
-    }
 }

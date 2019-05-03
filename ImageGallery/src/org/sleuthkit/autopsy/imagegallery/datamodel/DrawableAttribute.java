@@ -18,11 +18,13 @@
  */
 package org.sleuthkit.autopsy.imagegallery.datamodel;
 
+import org.sleuthkit.autopsy.datamodel.DhsImageCategory;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 import javafx.beans.property.ReadOnlyStringWrapper;
 import javafx.beans.property.StringProperty;
 import javafx.scene.Node;
@@ -83,14 +85,14 @@ public class DrawableAttribute<T extends Comparable<T>> {
      * //TODO: this has lead to awkward hard to maintain code, and little
      * advantage. move categories into DrawableDB?
      */
-    public final static DrawableAttribute<Category> CATEGORY =
-            new DrawableAttribute<Category>(AttributeName.CATEGORY, Bundle.DrawableAttribute_category(),
+    public final static DrawableAttribute<DhsImageCategory> CATEGORY =
+            new DrawableAttribute<DhsImageCategory>(AttributeName.CATEGORY, Bundle.DrawableAttribute_category(),
                     false,
                     "category-icon.png", //NON-NLS
                     f -> Collections.singleton(f.getCategory())) {
 
                 @Override
-                public Node getGraphicForValue(Category val) {
+                public Node getGraphicForValue(DhsImageCategory val) {
                     return val.getGraphic();
                 }
             };
@@ -224,7 +226,9 @@ public class DrawableAttribute<T extends Comparable<T>> {
     }
 
     public Collection<T> getValue(DrawableFile f) {
-        return extractor.apply(f);
+        return extractor.apply(f).stream()
+              .filter(value ->  (value != null && value.toString().isEmpty()== false) )
+              .collect(Collectors.toSet());
     }
 
     public static enum AttributeName {

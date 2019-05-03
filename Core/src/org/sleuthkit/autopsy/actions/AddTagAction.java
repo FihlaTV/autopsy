@@ -1,7 +1,7 @@
 /*
  * Autopsy Forensic Browser
  *
- * Copyright 2011-2016 Basis Technology Corp.
+ * Copyright 2011-2018 Basis Technology Corp.
  * Contact: carrier <at> sleuthkit <dot> org
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,6 +19,8 @@
 package org.sleuthkit.autopsy.actions;
 
 import java.awt.event.ActionEvent;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.logging.Level;
@@ -28,10 +30,12 @@ import javax.swing.JMenuItem;
 import org.openide.util.NbBundle;
 import org.openide.util.actions.Presenter;
 import org.sleuthkit.autopsy.casemodule.Case;
+import org.sleuthkit.autopsy.casemodule.NoCurrentCaseException;
 import org.sleuthkit.autopsy.casemodule.services.TagsManager;
 import org.sleuthkit.autopsy.coreutils.Logger;
 import org.sleuthkit.datamodel.TagName;
 import org.sleuthkit.datamodel.TskCoreException;
+import org.sleuthkit.datamodel.TskData;
 
 /**
  * An abstract base class for Actions that allow users to tag SleuthKit data
@@ -81,7 +85,7 @@ abstract class AddTagAction extends AbstractAction implements Presenter.Popup {
      */
     // @@@ This user interface has some significant usability issues and needs
     // to be reworked.
-    private class TagMenu extends JMenu {
+    private final class TagMenu extends JMenu {
 
         private static final long serialVersionUID = 1L;
 
@@ -89,25 +93,23 @@ abstract class AddTagAction extends AbstractAction implements Presenter.Popup {
             super(getActionDisplayName());
 
             // Get the current set of tag names.
-            TagsManager tagsManager = Case.getCurrentCase().getServices().getTagsManager();
             Map<String, TagName> tagNamesMap = null;
+            List<String> standardTagNames = TagsManager.getStandardTagNames();
             try {
+                TagsManager tagsManager = Case.getCurrentCaseThrows().getServices().getTagsManager();
                 tagNamesMap = new TreeMap<>(tagsManager.getDisplayNamesToTagNamesMap());
-            } catch (TskCoreException ex) {
+            } catch (TskCoreException | NoCurrentCaseException ex) {
                 Logger.getLogger(TagsManager.class.getName()).log(Level.SEVERE, "Failed to get tag names", ex); //NON-NLS
             }
 
-            // Create a "Quick Tag" sub-menu.
-            JMenu quickTagMenu = new JMenu(NbBundle.getMessage(this.getClass(), "AddTagAction.quickTag"));
-            add(quickTagMenu);
-
-            // Each tag name in the current set of tags gets its own menu item in
-            // the "Quick Tags" sub-menu. Selecting one of these menu items adds
-            // a tag with the associated tag name.
+            // Create a menu item for each of the existing and visible tags.
+            // Selecting one of these menu items adds  a tag with the associated tag name.
+            List<JMenuItem> standardTagMenuitems = new ArrayList<>();
             if (null != tagNamesMap && !tagNamesMap.isEmpty()) {
                 for (Map.Entry<String, TagName> entry : tagNamesMap.entrySet()) {
                     String tagDisplayName = entry.getKey();
-                    JMenuItem tagNameItem = new JMenuItem(tagDisplayName);
+                    String notableString = entry.getValue().getKnownStatus() == TskData.FileKnown.BAD ? TagsManager.getNotableTagLabel() : "";
+                    JMenuItem tagNameItem = new JMenuItem(tagDisplayName + notableString);
                     // for the bookmark tag name only, added shortcut label
                     if (tagDisplayName.equals(NbBundle.getMessage(AddTagAction.class, "AddBookmarkTagAction.bookmark.text"))) {
                         tagNameItem.setAccelerator(AddBookmarkTagAction.BOOKMARK_SHORTCUT);
@@ -116,28 +118,26 @@ abstract class AddTagAction extends AbstractAction implements Presenter.Popup {
                     tagNameItem.addActionListener((ActionEvent e) -> {
                         getAndAddTag(entry.getKey(), entry.getValue(), NO_COMMENT);
                     });
-                    quickTagMenu.add(tagNameItem);
+                    
+                     // Show custom tags before predefined tags in the menu
+                    if (standardTagNames.contains(tagDisplayName)) {
+                        standardTagMenuitems.add(tagNameItem);
+                    } else {
+                        add(tagNameItem);
+                    }
                 }
-            } else {
-                JMenuItem empty = new JMenuItem(NbBundle.getMessage(this.getClass(), "AddTagAction.noTags"));
-                empty.setEnabled(false);
-                quickTagMenu.add(empty);
-             }
-
-            quickTagMenu.addSeparator();
-
-            // The "Quick Tag" menu also gets an "Choose Tag..." menu item.
-            // Selecting this item initiates a dialog that can be used to create
-            // or select a tag name and adds a tag with the resulting name.
-            JMenuItem newTagMenuItem = new JMenuItem(NbBundle.getMessage(this.getClass(), "AddTagAction.newTag"));
-            newTagMenuItem.addActionListener((ActionEvent e) -> {
-                TagName tagName = GetTagNameDialog.doDialog();
-                if (null != tagName) {
-                    addTag(tagName, NO_COMMENT);
-                }
+            } 
+            
+            if (getItemCount() > 0) {
+                addSeparator();
+            }
+            
+            standardTagMenuitems.forEach((menuItem) -> {
+                add(menuItem);
             });
-            quickTagMenu.add(newTagMenuItem);
-
+            
+            addSeparator();
+             
             // Create a "Choose Tag and Comment..." menu item. Selecting this item initiates
             // a dialog that can be used to create or select a tag name with an
             // optional comment and adds a tag with the resulting name.
@@ -150,33 +150,54 @@ abstract class AddTagAction extends AbstractAction implements Presenter.Popup {
                 }
             });
             add(tagAndCommentItem);
+            
+            // Create a  "New Tag..." menu item.
+            // Selecting this item initiates a dialog that can be used to create
+            // or select a tag name and adds a tag with the resulting name.
+            JMenuItem newTagMenuItem = new JMenuItem(NbBundle.getMessage(this.getClass(), "AddTagAction.newTag"));
+            newTagMenuItem.addActionListener((ActionEvent e) -> {
+                TagName tagName = GetTagNameDialog.doDialog();
+                if (null != tagName) {
+                    addTag(tagName, NO_COMMENT);
+                }
+            });
+            add(newTagMenuItem);
+             
         }
 
         /**
          * Method to add to the action listener for each menu item. Allows a tag
          * display name to be added to the menu with an action listener without
-         * having to instantiate a TagName object for it.
-         * When the method is called, the TagName object is created here if it
-         * doesn't already exist.
-         * 
+         * having to instantiate a TagName object for it. When the method is
+         * called, the TagName object is created here if it doesn't already
+         * exist.
+         *
          * @param tagDisplayName display name for the tag name
          * @param tagName        TagName object associated with the tag name,
          *                       may be null
          * @param comment        comment for the content or artifact tag
          */
         private void getAndAddTag(String tagDisplayName, TagName tagName, String comment) {
+            Case openCase;
+            try {
+                openCase = Case.getCurrentCaseThrows();
+            } catch (NoCurrentCaseException ex) {
+                Logger.getLogger(AddTagAction.class.getName()).log(Level.SEVERE, "Exception while getting open case.", ex); // NON-NLS
+                return;
+            }
+
             if (tagName == null) {
                 try {
-                    tagName = Case.getCurrentCase().getServices().getTagsManager().addTagName(tagDisplayName);
+                    tagName = openCase.getServices().getTagsManager().addTagName(tagDisplayName);
                 } catch (TagsManager.TagNameAlreadyExistsException ex) {
                     try {
-                        tagName = Case.getCurrentCase().getServices().getTagsManager().getDisplayNamesToTagNamesMap().get(tagDisplayName);
+                        tagName = openCase.getServices().getTagsManager().getDisplayNamesToTagNamesMap().get(tagDisplayName);
                     } catch (TskCoreException ex1) {
                         Logger.getLogger(AddTagAction.class.getName()).log(Level.SEVERE, tagDisplayName + " already exists in database but an error occurred in retrieving it.", ex1); //NON-NLS
-                    }
+                    } 
                 } catch (TskCoreException ex) {
                     Logger.getLogger(AddTagAction.class.getName()).log(Level.SEVERE, "Error adding " + tagDisplayName + " tag name", ex); //NON-NLS
-                }
+                } 
             }
             addTag(tagName, comment);
         }

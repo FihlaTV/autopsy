@@ -1,7 +1,7 @@
 /*
  * Autopsy Forensic Browser
  *
- * Copyright 2011 - 2013 Basis Technology Corp.
+ * Copyright 2011-2018 Basis Technology Corp.
  * Contact: carrier <at> sleuthkit <dot> org
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,7 +18,6 @@
  */
 package org.sleuthkit.autopsy.modules.hashdatabase;
 
-import java.awt.*;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.util.ArrayList;
@@ -26,7 +25,7 @@ import java.util.List;
 import javax.swing.JOptionPane;
 
 import org.openide.util.NbBundle;
-import org.sleuthkit.autopsy.modules.hashdatabase.HashDbManager.HashDb;
+import org.sleuthkit.autopsy.modules.hashdatabase.HashDbManager.SleuthkitHashSet;
 
 /**
  * This class exists as a stop-gap measure to force users to have an indexed
@@ -41,10 +40,11 @@ import org.sleuthkit.autopsy.modules.hashdatabase.HashDbManager.HashDb;
  * completion. Furthermore, it does not delete any files left over from a
  * half-indexed state, forcing the user to perform cleanup.
  */
+@SuppressWarnings("PMD.SingularField") // UI widgets cause lots of false positives
 class ModalNoButtons extends javax.swing.JDialog implements PropertyChangeListener {
 
-    List<HashDb> unindexed;
-    HashDb toIndex;
+    List<SleuthkitHashSet> unindexed;
+    SleuthkitHashSet toIndex;
     HashLookupSettingsPanel hdbmp;
     int length = 0;
     int currentcount = 1;
@@ -58,7 +58,7 @@ class ModalNoButtons extends javax.swing.JDialog implements PropertyChangeListen
      * @param parent    Swing parent frame.
      * @param unindexed the list of unindexed databases to index.
      */
-    ModalNoButtons(HashLookupSettingsPanel hdbmp, java.awt.Frame parent, List<HashDb> unindexed) {
+    ModalNoButtons(HashLookupSettingsPanel hdbmp, java.awt.Frame parent, List<SleuthkitHashSet> unindexed) {
         super(parent, NbBundle.getMessage(ModalNoButtons.class, "ModalNoButtons.indexingDbsTitle"), true);
         this.unindexed = unindexed;
         this.toIndex = null;
@@ -75,7 +75,7 @@ class ModalNoButtons extends javax.swing.JDialog implements PropertyChangeListen
      * @param parent    Swing parent frame.
      * @param unindexed The unindexed database to index.
      */
-    ModalNoButtons(HashLookupSettingsPanel hdbmp, java.awt.Frame parent, HashDb unindexed) {
+    ModalNoButtons(HashLookupSettingsPanel hdbmp, java.awt.Frame parent, SleuthkitHashSet unindexed) {
         super(parent, NbBundle.getMessage(ModalNoButtons.class, "ModalNoButtons.indexingDbTitle"), true);
         this.unindexed = null;
         this.toIndex = unindexed;
@@ -139,10 +139,10 @@ class ModalNoButtons extends javax.swing.JDialog implements PropertyChangeListen
                                 .addComponent(CURRENTLYON_LABEL)
                                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                                 .addComponent(CURRENTDB_LABEL)))
-                        .addGap(0, 161, Short.MAX_VALUE))
+                        .addGap(0, 0, Short.MAX_VALUE))
                     .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, layout.createSequentialGroup()
                         .addGap(0, 0, Short.MAX_VALUE)
-                        .addComponent(CANCEL_BUTTON, javax.swing.GroupLayout.PREFERRED_SIZE, 87, javax.swing.GroupLayout.PREFERRED_SIZE)))
+                        .addComponent(CANCEL_BUTTON)))
                 .addContainerGap())
         );
         layout.setVerticalGroup(
@@ -183,7 +183,7 @@ class ModalNoButtons extends javax.swing.JDialog implements PropertyChangeListen
                         "ModalNoButtons.dlgTitle.unfinishedIndexing"),
                 JOptionPane.YES_NO_OPTION);
         if (res == JOptionPane.YES_OPTION) {
-            List<HashDb> remove = new ArrayList<>();
+            List<SleuthkitHashSet> remove = new ArrayList<>();
             if (this.toIndex == null) {
                 remove = this.unindexed;
             } else {
@@ -230,7 +230,7 @@ class ModalNoButtons extends javax.swing.JDialog implements PropertyChangeListen
     private void indexThese() {
         length = this.unindexed.size();
         this.INDEXING_PROGBAR.setIndeterminate(true);
-        for (HashDb db : this.unindexed) {
+        for (SleuthkitHashSet db : this.unindexed) {
             currentDb = db.getHashSetName();
             this.CURRENTDB_LABEL.setText("(" + currentDb + ")");
             this.CURRENTLYON_LABEL.setText(
@@ -255,7 +255,7 @@ class ModalNoButtons extends javax.swing.JDialog implements PropertyChangeListen
      * this dialog if all indexing is complete.
      */
     public void propertyChange(PropertyChangeEvent evt) {
-        if (evt.getPropertyName().equals(HashDb.Event.INDEXING_DONE.name())) {
+        if (evt.getPropertyName().equals(SleuthkitHashSet.Event.INDEXING_DONE.name())) {
             if (currentcount >= length) {
                 this.INDEXING_PROGBAR.setValue(100);
                 this.setModal(false);

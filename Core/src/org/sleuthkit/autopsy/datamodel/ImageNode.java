@@ -1,7 +1,7 @@
 /*
  * Autopsy Forensic Browser
  *
- * Copyright 2011-2014 Basis Technology Corp.
+ * Copyright 2011-2018 Basis Technology Corp.
  * Contact: carrier <at> sleuthkit <dot> org
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,29 +18,30 @@
  */
 package org.sleuthkit.autopsy.datamodel;
 
-import java.awt.event.ActionEvent;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.logging.Level;
-import javax.swing.AbstractAction;
 import javax.swing.Action;
 import org.openide.nodes.Children;
 import org.openide.nodes.Sheet;
 import org.openide.util.NbBundle;
 import org.openide.util.NbBundle.Messages;
 import org.sleuthkit.autopsy.casemodule.Case;
+import org.sleuthkit.autopsy.casemodule.NoCurrentCaseException;
+import org.sleuthkit.autopsy.casemodule.datasourcesummary.ViewSummaryInformationAction;
 import org.sleuthkit.autopsy.coreutils.Logger;
 import org.sleuthkit.autopsy.directorytree.ExplorerNodeActionVisitor;
 import org.sleuthkit.autopsy.directorytree.FileSearchAction;
 import org.sleuthkit.autopsy.directorytree.NewWindowViewAction;
 import org.sleuthkit.autopsy.ingest.IngestManager;
 import org.sleuthkit.autopsy.ingest.ModuleContentEvent;
-import org.sleuthkit.autopsy.ingest.RunIngestModulesDialog;
+import org.sleuthkit.autopsy.ingest.runIngestModuleWizard.RunIngestModulesAction;
 import org.sleuthkit.datamodel.Content;
 import org.sleuthkit.datamodel.Image;
 import org.sleuthkit.datamodel.SleuthkitCase.CaseDbQuery;
@@ -81,12 +82,12 @@ public class ImageNode extends AbstractContentNode<Image> {
         // Listen for ingest events so that we can detect new added files (e.g. carved)
         IngestManager.getInstance().addIngestModuleEventListener(pcl);
         // Listen for case events so that we can detect when case is closed
-        Case.addPropertyChangeListener(pcl);
+        Case.addEventTypeSubscriber(EnumSet.of(Case.Events.CURRENT_CASE), pcl);
     }
 
     private void removeListeners() {
         IngestManager.getInstance().removeIngestModuleEventListener(pcl);
-        Case.removePropertyChangeListener(pcl);
+        Case.removeEventTypeSubscriber(EnumSet.of(Case.Events.CURRENT_CASE), pcl);
     }
 
     /**
@@ -101,22 +102,15 @@ public class ImageNode extends AbstractContentNode<Image> {
         "ImageNode.getActions.openFileSearchByAttr.text=Open File Search by Attributes",})
     public Action[] getActions(boolean context) {
 
-        List<Action> actionsList = new ArrayList<Action>();
+        List<Action> actionsList = new ArrayList<>();
         for (Action a : super.getActions(true)) {
             actionsList.add(a);
         }
         actionsList.addAll(ExplorerNodeActionVisitor.getActions(content));
         actionsList.add(new FileSearchAction(
                 Bundle.ImageNode_getActions_openFileSearchByAttr_text()));
-        actionsList.add(new AbstractAction(
-                Bundle.ImageNode_action_runIngestMods_text()) {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                final RunIngestModulesDialog ingestDialog = new RunIngestModulesDialog(Collections.<Content>singletonList(content));
-                ingestDialog.display();
-            }
-        });
-
+        actionsList.add(new ViewSummaryInformationAction(content.getId()));
+        actionsList.add(new RunIngestModulesAction(Collections.<Content>singletonList(content)));
         actionsList.add(new NewWindowViewAction(
                 NbBundle.getMessage(this.getClass(), "ImageNode.getActions.viewInNewWin.text"), this));
         return actionsList.toArray(new Action[0]);
@@ -132,10 +126,7 @@ public class ImageNode extends AbstractContentNode<Image> {
         "ImageNode.createSheet.type.text=Image",
         "ImageNode.createSheet.sectorSize.name=Sector Size (Bytes)",
         "ImageNode.createSheet.sectorSize.displayName=Sector Size (Bytes)",
-        "ImageNode.createSheet.sectorSize.desc=Sector size of the image in bytes.",
-        "ImageNode.createSheet.md5.name=MD5 Hash",
-        "ImageNode.createSheet.md5.displayName=MD5 Hash",
-        "ImageNode.createSheet.md5.desc=MD5 Hash of the image",
+        "ImageNode.createSheet.sectorSize.desc=Sector size of the image in bytes.",      
         "ImageNode.createSheet.timezone.name=Timezone",
         "ImageNode.createSheet.timezone.displayName=Timezone",
         "ImageNode.createSheet.timezone.desc=Timezone of the image",
@@ -143,60 +134,55 @@ public class ImageNode extends AbstractContentNode<Image> {
         "ImageNode.createSheet.deviceId.displayName=Device ID",
         "ImageNode.createSheet.deviceId.desc=Device ID of the image"})
     protected Sheet createSheet() {
-        Sheet s = super.createSheet();
-        Sheet.Set ss = s.get(Sheet.PROPERTIES);
-        if (ss == null) {
-            ss = Sheet.createPropertiesSet();
-            s.put(ss);
+        Sheet sheet = super.createSheet();
+        Sheet.Set sheetSet = sheet.get(Sheet.PROPERTIES);
+        if (sheetSet == null) {
+            sheetSet = Sheet.createPropertiesSet();
+            sheet.put(sheetSet);
         }
 
-        ss.put(new NodeProperty<>(NbBundle.getMessage(this.getClass(), "ImageNode.createSheet.name.name"),
+        sheetSet.put(new NodeProperty<>(NbBundle.getMessage(this.getClass(), "ImageNode.createSheet.name.name"),
                 NbBundle.getMessage(this.getClass(), "ImageNode.createSheet.name.displayName"),
                 NbBundle.getMessage(this.getClass(), "ImageNode.createSheet.name.desc"),
                 getDisplayName()));
 
-        ss.put(new NodeProperty<>(Bundle.ImageNode_createSheet_type_name(),
+        sheetSet.put(new NodeProperty<>(Bundle.ImageNode_createSheet_type_name(),
                 Bundle.ImageNode_createSheet_type_displayName(),
                 Bundle.ImageNode_createSheet_type_desc(),
                 Bundle.ImageNode_createSheet_type_text()));
 
-        ss.put(new NodeProperty<>(Bundle.ImageNode_createSheet_size_name(),
+        sheetSet.put(new NodeProperty<>(Bundle.ImageNode_createSheet_size_name(),
                 Bundle.ImageNode_createSheet_size_displayName(),
                 Bundle.ImageNode_createSheet_size_desc(),
                 this.content.getSize()));
-        ss.put(new NodeProperty<>(Bundle.ImageNode_createSheet_sectorSize_name(),
+        sheetSet.put(new NodeProperty<>(Bundle.ImageNode_createSheet_sectorSize_name(),
                 Bundle.ImageNode_createSheet_sectorSize_displayName(),
                 Bundle.ImageNode_createSheet_sectorSize_desc(),
                 this.content.getSsize()));
 
-        ss.put(new NodeProperty<>(Bundle.ImageNode_createSheet_md5_name(),
-                Bundle.ImageNode_createSheet_md5_displayName(),
-                Bundle.ImageNode_createSheet_md5_desc(),
-                this.content.getMd5()));
-
-        ss.put(new NodeProperty<>(Bundle.ImageNode_createSheet_timezone_name(),
+        sheetSet.put(new NodeProperty<>(Bundle.ImageNode_createSheet_timezone_name(),
                 Bundle.ImageNode_createSheet_timezone_displayName(),
                 Bundle.ImageNode_createSheet_timezone_desc(),
                 this.content.getTimeZone()));
 
-        try (CaseDbQuery query = Case.getCurrentCase().getSleuthkitCase().executeQuery("SELECT device_id FROM data_source_info WHERE obj_id = " + this.content.getId());) {
+        try (CaseDbQuery query = Case.getCurrentCaseThrows().getSleuthkitCase().executeQuery("SELECT device_id FROM data_source_info WHERE obj_id = " + this.content.getId());) {
             ResultSet deviceIdSet = query.getResultSet();
             if (deviceIdSet.next()) {
-                ss.put(new NodeProperty<>(Bundle.ImageNode_createSheet_deviceId_name(),
+                sheetSet.put(new NodeProperty<>(Bundle.ImageNode_createSheet_deviceId_name(),
                         Bundle.ImageNode_createSheet_deviceId_displayName(),
                         Bundle.ImageNode_createSheet_deviceId_desc(),
                         deviceIdSet.getString("device_id")));
             }
-        } catch (SQLException | TskCoreException ex) {
+        } catch (SQLException | TskCoreException | NoCurrentCaseException ex) {
             logger.log(Level.SEVERE, "Failed to get device id for the following image: " + this.content.getId(), ex);
         }
 
-        return s;
+        return sheet;
     }
 
     @Override
-    public <T> T accept(ContentNodeVisitor<T> v) {
-        return v.visit(this);
+    public <T> T accept(ContentNodeVisitor<T> visitor) {
+        return visitor.visit(this);
     }
 
     @Override
@@ -205,8 +191,8 @@ public class ImageNode extends AbstractContentNode<Image> {
     }
 
     @Override
-    public <T> T accept(DisplayableItemNodeVisitor<T> v) {
-        return v.visit(this);
+    public <T> T accept(DisplayableItemNodeVisitor<T> visitor) {
+        return visitor.visit(this);
     }
 
     @Override

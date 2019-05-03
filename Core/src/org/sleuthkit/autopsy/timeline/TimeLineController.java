@@ -1,7 +1,7 @@
 /*
  * Autopsy Forensic Browser
  *
- * Copyright 2014-2016 Basis Technology Corp.
+ * Copyright 2014-2018 Basis Technology Corp.
  * Contact: carrier <at> sleuthkit <dot> org
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -67,6 +67,7 @@ import org.openide.util.NbBundle;
 import org.sleuthkit.autopsy.casemodule.Case;
 import static org.sleuthkit.autopsy.casemodule.Case.Events.CURRENT_CASE;
 import static org.sleuthkit.autopsy.casemodule.Case.Events.DATA_SOURCE_ADDED;
+import org.sleuthkit.autopsy.casemodule.NoCurrentCaseException;
 import org.sleuthkit.autopsy.casemodule.events.BlackBoardArtifactTagAddedEvent;
 import org.sleuthkit.autopsy.casemodule.events.BlackBoardArtifactTagDeletedEvent;
 import org.sleuthkit.autopsy.casemodule.events.ContentTagAddedEvent;
@@ -575,7 +576,6 @@ public class TimeLineController {
             Case.addPropertyChangeListener(caseListener);
             listeningToAutopsy = true;
         }
-
         Platform.runLater(() -> promptForRebuild(file, artifact));
     }
 
@@ -699,7 +699,9 @@ public class TimeLineController {
         if (topComponent == null) {
             topComponent = new TimeLineTopComponent(this);
         }
-        topComponent.open();
+        if (topComponent.isOpened() == false) {
+            topComponent.open();
+        }
         topComponent.toFront();
         /*
          * Make this top component active so its ExplorerManager's lookup gets
@@ -925,7 +927,7 @@ public class TimeLineController {
      * @param o The object to un-register.
      */
     synchronized public void unRegisterForEvents(Object o) {
-        eventbus.unregister(0);
+        eventbus.unregister(o);
     }
 
     static synchronized public void setTimeZone(TimeZone timeZone) {
@@ -948,8 +950,8 @@ public class TimeLineController {
              * already closed.
              */
             try {
-                Case.getCurrentCase();
-            } catch (IllegalStateException notUsed) {
+                Case.getCurrentCaseThrows();
+            } catch (NoCurrentCaseException notUsed) {
                 // Case is closed, do nothing.
                 return;
             }

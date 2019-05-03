@@ -1,7 +1,7 @@
 /*
  * Autopsy Forensic Browser
  *
- * Copyright 2011-2016 Basis Technology Corp.
+ * Copyright 2011-2018 Basis Technology Corp.
  * Contact: carrier <at> sleuthkit <dot> org
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,23 +19,30 @@
 package org.sleuthkit.autopsy.keywordsearch;
 
 import java.io.BufferedReader;
+import java.io.Reader;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.logging.Level;
+import org.apache.commons.lang3.math.NumberUtils;
 import org.apache.solr.client.solrj.SolrServerException;
 import org.apache.solr.common.SolrInputDocument;
 import org.openide.util.NbBundle;
 import org.sleuthkit.autopsy.coreutils.Logger;
 import org.sleuthkit.autopsy.datamodel.ContentUtils;
+import org.sleuthkit.autopsy.healthmonitor.HealthMonitor;
+import org.sleuthkit.autopsy.healthmonitor.TimingMetric;
 import org.sleuthkit.autopsy.ingest.IngestJobContext;
 import org.sleuthkit.autopsy.keywordsearch.Chunker.Chunk;
 import org.sleuthkit.datamodel.AbstractFile;
 import org.sleuthkit.datamodel.BlackboardArtifact;
+import org.sleuthkit.datamodel.Content;
 import org.sleuthkit.datamodel.DerivedFile;
 import org.sleuthkit.datamodel.Directory;
 import org.sleuthkit.datamodel.File;
 import org.sleuthkit.datamodel.LayoutFile;
+import org.sleuthkit.datamodel.LocalDirectory;
 import org.sleuthkit.datamodel.LocalFile;
+import org.sleuthkit.datamodel.Report;
 import org.sleuthkit.datamodel.SlackFile;
 import org.sleuthkit.datamodel.SleuthkitItemVisitor;
 import org.sleuthkit.datamodel.SleuthkitVisitableItem;
@@ -52,8 +59,6 @@ class Ingester {
     private final Server solrServer = KeywordSearch.getServer();
     private static final SolrFieldsVisitor SOLR_FIELDS_VISITOR = new SolrFieldsVisitor();
     private static Ingester instance;
-
-    private static final int SINGLE_READ_CHARS = 512;
 
     private Ingester() {
     }
@@ -88,7 +93,7 @@ class Ingester {
      *                           file, but the Solr server is probably fine.
      */
     void indexMetaDataOnly(AbstractFile file) throws IngesterException {
-        indexChunk("", file.getName(), getContentFields(file));
+        indexChunk("", file.getName().toLowerCase(), getContentFields(file));
     }
 
     /**
@@ -101,8 +106,8 @@ class Ingester {
      * @throws IngesterException if there was an error processing a specific
      *                           artifact, but the Solr server is probably fine.
      */
-    void indexMetaDataOnly(BlackboardArtifact artifact) throws IngesterException {
-        indexChunk("", new ArtifactTextExtractor().getName(artifact), getContentFields(artifact));
+    void indexMetaDataOnly(BlackboardArtifact artifact, String sourceName) throws IngesterException {
+        indexChunk("", sourceName, getContentFields(artifact));
     }
 
     /**
@@ -132,28 +137,23 @@ class Ingester {
      * @param context   The ingest job context that can be used to cancel this
      *                  process.
      *
-     * @return True if this method executed normally. or False if there was an
-     *         unexpected exception. //JMTODO: This policy needs to be reviewed.
+     * @return True if indexing was completed, false otherwise.
      *
      * @throws org.sleuthkit.autopsy.keywordsearch.Ingester.IngesterException
      */
-    < T extends SleuthkitVisitableItem> boolean indexText(TextExtractor< T> extractor, T source, IngestJobContext context) throws Ingester.IngesterException {
-        final long sourceID = extractor.getID(source);
-        final String sourceName = extractor.getName(source);
-
+    // TODO (JIRA-3118): Cancelled text indexing does not propagate cancellation to clients 
+    < T extends SleuthkitVisitableItem> boolean indexText(Reader sourceReader, long sourceID, String sourceName, T source, IngestJobContext context) throws Ingester.IngesterException {
         int numChunks = 0; //unknown until chunking is done
-
-        if (extractor.isDisabled()) {
-            /* some Extractors, notable the strings extractor, have options
-             * which can be configured such that no extraction should be done */
-            return true;
-        }
-
+        
         Map<String, String> fields = getContentFields(source);
         //Get a reader for the content of the given source
-        try (BufferedReader reader = new BufferedReader(extractor.getReader(source));) {
+        try (BufferedReader reader = new BufferedReader(sourceReader)) {
             Chunker chunker = new Chunker(reader);
             for (Chunk chunk : chunker) {
+                if (context != null && context.fileIngestIsCancelled()) {
+                    logger.log(Level.INFO, "File ingest cancelled. Cancelling keyword search indexing of {0}", sourceName);
+                    return false;
+                }
                 String chunkId = Server.getChunkIdString(sourceID, numChunks + 1);
                 fields.put(Server.Schema.ID.toString(), chunkId);
                 fields.put(Server.Schema.CHUNK_SIZE.toString(), String.valueOf(chunk.getBaseChunkLength()));
@@ -162,26 +162,32 @@ class Ingester {
                     indexChunk(chunk.toString(), sourceName, fields);
                     numChunks++;
                 } catch (Ingester.IngesterException ingEx) {
-                    extractor.logWarning("Ingester had a problem with extracted string from file '" //NON-NLS
+                    logger.log(Level.WARNING, "Ingester had a problem with extracted string from file '" //NON-NLS
                             + sourceName + "' (id: " + sourceID + ").", ingEx);//NON-NLS
 
                     throw ingEx; //need to rethrow to signal error and move on
                 }
             }
             if (chunker.hasException()) {
-                extractor.logWarning("Error chunking content from " + sourceID + ": " + sourceName, chunker.getException());
+                logger.log(Level.WARNING, "Error chunking content from " + sourceID + ": " + sourceName, chunker.getException());
                 return false;
             }
         } catch (Exception ex) {
-            extractor.logWarning("Unexpected error, can't read content stream from " + sourceID + ": " + sourceName, ex);//NON-NLS
+            logger.log(Level.WARNING, "Unexpected error, can't read content stream from " + sourceID + ": " + sourceName, ex);//NON-NLS
             return false;
         } finally {
-            //after all chunks, index just the meta data, including the  numChunks, of the parent file
-            fields.put(Server.Schema.NUM_CHUNKS.toString(), Integer.toString(numChunks));
-            fields.put(Server.Schema.ID.toString(), Long.toString(sourceID)); //reset id field to base document id
-            indexChunk(null, sourceName, fields);
+            if (context != null && context.fileIngestIsCancelled()) {
+                return false;
+            } else {
+                //after all chunks, index just the meta data, including the  numChunks, of the parent file
+                fields.put(Server.Schema.NUM_CHUNKS.toString(), Integer.toString(numChunks));
+                //reset id field to base document id
+                fields.put(Server.Schema.ID.toString(), Long.toString(sourceID));
+                //"parent" docs don't have chunk_size
+                fields.remove(Server.Schema.CHUNK_SIZE.toString());
+                indexChunk(null, sourceName, fields);
+            }
         }
-
         return true;
     }
 
@@ -192,7 +198,7 @@ class Ingester {
      * /update handler e.g. with XMLUpdateRequestHandler (deprecated in SOlr
      * 4.0.0), see if possible to stream with UpdateRequestHandler
      *
-     * @param chunk  The chunk content as a string
+     * @param chunk  The chunk content as a string, or null for metadata only
      * @param fields
      * @param size
      *
@@ -204,7 +210,6 @@ class Ingester {
             // but does this really mean we don't want to index it?
 
             //skip the file, image id unknown
-            //JMTODO: does this need to ne internationalized?
             String msg = NbBundle.getMessage(Ingester.class,
                     "Ingester.ingest.exception.unknownImgId.msg", sourceName); //JMTODO: does this need to ne internationalized?
             logger.log(Level.SEVERE, msg);
@@ -216,16 +221,28 @@ class Ingester {
         for (String key : fields.keySet()) {
             updateDoc.addField(key, fields.get(key));
         }
-        //add the content to the SolrInputDocument
-        //JMTODO: can we just add it to the field map before passing that in?
-        updateDoc.addField(Server.Schema.CONTENT.toString(), chunk);
 
         try {
             //TODO: consider timeout thread, or vary socket timeout based on size of indexed content
+
+            //add the content to the SolrInputDocument
+            //JMTODO: can we just add it to the field map before passing that in?
+            updateDoc.addField(Server.Schema.CONTENT.toString(), chunk);
+
+            // We also add the content (if present) in lowercase form to facilitate case
+            // insensitive substring/regular expression search.
+            double indexSchemaVersion = NumberUtils.toDouble(solrServer.getIndexInfo().getSchemaVersion());
+            if (indexSchemaVersion >= 2.1) {
+                updateDoc.addField(Server.Schema.CONTENT_STR.toString(), ((chunk == null) ? "" : chunk.toLowerCase()));
+            }
+
+            TimingMetric metric = HealthMonitor.getTimingMetric("Solr: Index chunk");
+
             solrServer.addDocument(updateDoc);
+            HealthMonitor.submitTimingMetric(metric);
             uncommitedIngests = true;
 
-        } catch (KeywordSearchModuleException ex) {
+        } catch (KeywordSearchModuleException | NoOpenCoreException ex) {
             //JMTODO: does this need to be internationalized?
             throw new IngesterException(
                     NbBundle.getMessage(Ingester.class, "Ingester.ingest.exception.err.msg", sourceName), ex);
@@ -272,6 +289,11 @@ class Ingester {
         }
 
         @Override
+        public Map<String, String> visit(LocalDirectory ld) {
+            return getCommonAndMACTimeFields(ld);
+        }
+
+        @Override
         public Map<String, String> visit(LayoutFile lf) {
             // layout files do not have times
             return getCommonFields(lf);
@@ -313,16 +335,16 @@ class Ingester {
          *
          * @return The field map of fields that are common to all file classes.
          */
-        private Map<String, String> getCommonFields(AbstractFile af) {
+        private Map<String, String> getCommonFields(AbstractFile file) {
             Map<String, String> params = new HashMap<>();
-            params.put(Server.Schema.ID.toString(), Long.toString(af.getId()));
+            params.put(Server.Schema.ID.toString(), Long.toString(file.getId()));
             try {
-                params.put(Server.Schema.IMAGE_ID.toString(), Long.toString(af.getDataSource().getId()));
+                params.put(Server.Schema.IMAGE_ID.toString(), Long.toString(file.getDataSource().getId()));
             } catch (TskCoreException ex) {
-                logger.log(Level.SEVERE, "Could not get data source id to properly index the file " + af.getId(), ex); //NON-NLS
+                logger.log(Level.SEVERE, "Could not get data source id to properly index the file " + file.getId(), ex); //NON-NLS
                 params.put(Server.Schema.IMAGE_ID.toString(), Long.toString(-1));
             }
-            params.put(Server.Schema.FILE_NAME.toString(), af.getName());
+            params.put(Server.Schema.FILE_NAME.toString(), file.getName().toLowerCase());
             return params;
         }
 
@@ -338,9 +360,34 @@ class Ingester {
             Map<String, String> params = new HashMap<>();
             params.put(Server.Schema.ID.toString(), Long.toString(artifact.getArtifactID()));
             try {
-                params.put(Server.Schema.IMAGE_ID.toString(), Long.toString(ArtifactTextExtractor.getDataSource(artifact).getId()));
+                params.put(Server.Schema.IMAGE_ID.toString(), Long.toString(artifact.getDataSource().getId()));
             } catch (TskCoreException ex) {
                 logger.log(Level.SEVERE, "Could not get data source id to properly index the artifact " + artifact.getArtifactID(), ex); //NON-NLS
+                params.put(Server.Schema.IMAGE_ID.toString(), Long.toString(-1));
+            }
+            return params;
+        }
+
+        /**
+         * Get the field map for artifacts.
+         *
+         * @param report The report to get fields for.
+         *
+         * @return The field map for the given report.
+         */
+        @Override
+        public Map<String, String> visit(Report report) {
+            Map<String, String> params = new HashMap<>();
+            params.put(Server.Schema.ID.toString(), Long.toString(report.getId()));
+            try {
+                Content dataSource = report.getDataSource();
+                if (null == dataSource) {
+                    params.put(Server.Schema.IMAGE_ID.toString(), Long.toString(-1));
+                } else {
+                    params.put(Server.Schema.IMAGE_ID.toString(), Long.toString(dataSource.getId()));
+                }
+            } catch (TskCoreException ex) {
+                logger.log(Level.SEVERE, "Could not get data source id to properly index the report, using default value. Id: " + report.getId(), ex); //NON-NLS
                 params.put(Server.Schema.IMAGE_ID.toString(), Long.toString(-1));
             }
             return params;

@@ -1,7 +1,7 @@
 /*
  * Autopsy Forensic Browser
  *
- * Copyright 2012 Basis Technology Corp.
+ * Copyright 2012-2018 Basis Technology Corp.
  * Contact: carrier <at> sleuthkit <dot> org
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -40,14 +40,19 @@ import org.openide.util.NbBundle;
 import org.sleuthkit.autopsy.coreutils.Logger;
 import org.sleuthkit.autopsy.python.JythonModuleLoader;
 
+/**
+ * Display reports modules.
+ */
+@SuppressWarnings("PMD.SingularField") // UI widgets cause lots of false positives
 final class ReportVisualPanel1 extends JPanel implements ListSelectionListener {
 
     private static final Logger logger = Logger.getLogger(ReportVisualPanel1.class.getName());
-    private ReportWizardPanel1 wizPanel;
-    private List<ReportModule> modules = new ArrayList<>();
-    private List<GeneralReportModule> generalModules = new ArrayList<>();
-    private List<TableReportModule> tableModules = new ArrayList<>();
-    private List<FileReportModule> fileModules = new ArrayList<>();
+    private final ReportWizardPanel1 wizPanel;
+    private final List<ReportModule> modules = new ArrayList<>();
+    private final List<GeneralReportModule> generalModules = new ArrayList<>();
+    private final List<TableReportModule> tableModules = new ArrayList<>();
+    private final List<FileReportModule> fileModules = new ArrayList<>();
+    private PortableCaseReportModule portableCaseModule;
     private Integer selectedIndex;
 
     /**
@@ -97,6 +102,13 @@ final class ReportVisualPanel1 extends JPanel implements ListSelectionListener {
             } else {
                 popupWarning(module);
             }
+        }
+        
+        portableCaseModule = new PortableCaseReportModule();
+        if (moduleIsValid(portableCaseModule)) {
+            modules.add(portableCaseModule);
+        } else {
+            popupWarning(portableCaseModule);
         }
 
         Collections.sort(modules, new Comparator<ReportModule>() {
@@ -194,6 +206,19 @@ final class ReportVisualPanel1 extends JPanel implements ListSelectionListener {
         }
         return null;
     }
+    
+    /**
+     * Get the selection status of the Portable Case report module.
+     *
+     * @return
+     */
+    PortableCaseReportModule getPortableCaseModule() {
+        ReportModule mod = getSelectedModule();
+        if (portableCaseModule.equals(mod)) {
+            return (PortableCaseReportModule) mod;
+        }
+        return null;
+    }
 
     /**
      * This method is called from within the constructor to initialize the form.
@@ -215,6 +240,7 @@ final class ReportVisualPanel1 extends JPanel implements ListSelectionListener {
         org.openide.awt.Mnemonics.setLocalizedText(reportModulesLabel, org.openide.util.NbBundle.getMessage(ReportVisualPanel1.class, "ReportVisualPanel1.reportModulesLabel.text")); // NOI18N
 
         configurationPanel.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(125, 125, 125)));
+        configurationPanel.setOpaque(false);
 
         javax.swing.GroupLayout configurationPanelLayout = new javax.swing.GroupLayout(configurationPanel);
         configurationPanel.setLayout(configurationPanelLayout);
@@ -231,6 +257,7 @@ final class ReportVisualPanel1 extends JPanel implements ListSelectionListener {
 
         descriptionTextPane.setBackground(new java.awt.Color(240, 240, 240));
         descriptionTextPane.setBorder(null);
+        descriptionTextPane.setOpaque(false);
         descriptionScrollPane.setViewportView(descriptionTextPane);
 
         modulesJList.setBackground(new java.awt.Color(240, 240, 240));
@@ -239,6 +266,7 @@ final class ReportVisualPanel1 extends JPanel implements ListSelectionListener {
             public int getSize() { return modules.length; }
             public ReportModule getElementAt(int i) { return modules[i]; }
         });
+        modulesJList.setOpaque(false);
         modulesScrollPane.setViewportView(modulesJList);
 
         javax.swing.GroupLayout layout = new javax.swing.GroupLayout(this);
@@ -290,18 +318,18 @@ final class ReportVisualPanel1 extends JPanel implements ListSelectionListener {
         // single selection, so max selection index is the only one selected.
         selectedIndex = m.getMaxSelectionIndex();
 
-        JPanel panel = new DefaultReportConfigurationPanel();
         ReportModule module = modules.get(selectedIndex);
-        boolean generalModuleSelected = false;
-        if (module instanceof GeneralReportModule) {
-            JPanel generalPanel = ((GeneralReportModule) module).getConfigurationPanel();
-            panel = (generalPanel == null) ? new JPanel() : generalPanel;
-            generalModuleSelected = true;
+        JPanel panel = module.getConfigurationPanel();
+        if (panel == null) {
+            panel = new JPanel();
         }
 
         descriptionTextPane.setText(module.getDescription());
         configurationPanel.add(panel, BorderLayout.CENTER);
         configurationPanel.revalidate();
+        configurationPanel.repaint();
+        
+        boolean generalModuleSelected = (module instanceof GeneralReportModule);
 
         wizPanel.setNext(!generalModuleSelected);
         wizPanel.setFinish(generalModuleSelected);
